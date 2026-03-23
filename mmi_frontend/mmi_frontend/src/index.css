@@ -1,0 +1,133 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Variables MMI ─────────────────────────────────────────── */
+:root {
+  --mmi-green:     #1B6B30;
+  --mmi-green-mid: #2E8B45;
+  --mmi-green-lt:  #E8F5EC;
+  --mmi-gold:      #C8A400;
+  --mmi-gold-lt:   #FDF6DA;
+  --mmi-dark:      #0F3D1A;
+}
+
+/* ── Base ──────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+body {
+  font-family: 'Montserrat', 'Cairo', sans-serif;
+  color: #1a1a1a;
+  background: #f8f9fa;
+}
+
+/* ── RTL Support ───────────────────────────────────────────── */
+html[dir="rtl"] body {
+  font-family: 'Cairo', 'Montserrat', sans-serif;
+}
+
+/* ── Navbar gradient MMI ───────────────────────────────────── */
+.navbar-mmi {
+  background: linear-gradient(90deg, #1B6B30 0%, #2E8B45 45%, #7ab648 70%, #C8A400 100%);
+}
+
+/* ── Hero banner ───────────────────────────────────────────── */
+.hero-banner {
+  background: linear-gradient(135deg, rgba(27,107,48,0.88) 0%, rgba(46,139,69,0.75) 60%, rgba(200,164,0,0.5) 100%);
+}
+
+/* ── Buttons ───────────────────────────────────────────────── */
+.btn-primary {
+  @apply bg-mmi-green text-white font-semibold px-6 py-2.5 rounded-lg
+         hover:bg-mmi-green-mid transition-all duration-200
+         focus:outline-none focus:ring-2 focus:ring-mmi-gold;
+}
+
+.btn-secondary {
+  @apply border-2 border-mmi-green text-mmi-green font-semibold px-6 py-2.5 rounded-lg
+         hover:bg-mmi-green hover:text-white transition-all duration-200;
+}
+
+.btn-gold {
+  @apply bg-mmi-gold text-white font-semibold px-6 py-2.5 rounded-lg
+         hover:opacity-90 transition-all duration-200;
+}
+
+/* ── Cards ─────────────────────────────────────────────────── */
+.card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100
+         hover:shadow-md transition-shadow duration-200;
+}
+
+.card-header {
+  @apply border-b border-gray-100 px-6 py-4;
+}
+
+/* ── Status badges ─────────────────────────────────────────── */
+.badge-soumise       { @apply bg-blue-100   text-blue-800   text-xs font-medium px-2.5 py-1 rounded-full; }
+.badge-en-cours      { @apply bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-1 rounded-full; }
+.badge-valide        { @apply bg-green-100  text-green-800  text-xs font-medium px-2.5 py-1 rounded-full; }
+.badge-rejete        { @apply bg-red-100    text-red-800    text-xs font-medium px-2.5 py-1 rounded-full; }
+.badge-incomplet     { @apply bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-1 rounded-full; }
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+.sidebar-link {
+  @apply flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium
+         text-gray-600 hover:bg-mmi-green-lt hover:text-mmi-green
+         transition-all duration-150 cursor-pointer;
+}
+
+.sidebar-link.active {
+  @apply bg-mmi-green-lt text-mmi-green;
+}
+
+/* ── Form inputs ───────────────────────────────────────────── */
+.form-input {
+  @apply w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+         focus:outline-none focus:ring-2 focus:ring-mmi-green focus:border-transparent
+         transition duration-150;
+}
+
+.form-label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+/* ── Section title ─────────────────────────────────────────── */
+.section-title {
+  @apply text-2xl font-bold text-mmi-green flex items-center gap-3;
+}
+.section-title::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background: var(--mmi-green);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Animations ────────────────────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeInUp {
+  animation: fadeInUp 0.5s ease forwards;
+}
+
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+
+/* ── GPS dot ────────────────────────────────────────────────── */
+@keyframes pulse-gps {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.gps-pulse { animation: pulse-gps 1.2s infinite; }
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #f1f1f1; }
+::-webkit-scrollbar-thumb { background: var(--mmi-green); border-radius: 3px; }
