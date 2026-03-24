@@ -45,6 +45,8 @@ api.interceptors.response.use(
 
 // ── Endpoints ────────────────────────────────────────────────
 export const authAPI = {
+  loginAgent: (data: { email: string; password: string }) =>
+              api.post('/auth/login/agent/', data),
   login:    (data: { identifiant_unique: string; password: string }) =>
               api.post('/auth/login/', data),
   register: (data: object) => api.post('/auth/register/', data),

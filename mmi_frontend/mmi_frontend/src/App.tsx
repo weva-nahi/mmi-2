@@ -4,6 +4,9 @@ import Footer from '@/components/layout/Footer'
 import RouteGuard from '@/components/ui/RouteGuard'
 import HomePage from '@/pages/public/HomePage'
 import LoginPage from '@/pages/auth/LoginPage'
+import LoginAgentPage from '@/pages/auth/LoginAgentPage'
+import ContactPage from '@/pages/public/ContactPage'
+import PMNEPage from '@/pages/public/PMNEPage'
 import RegisterPage from '@/pages/auth/RegisterPage'
 import DemandeurLayout from '@/pages/demandeur/DemandeurLayout'
 import DemandeurDashboard from '@/pages/demandeur/DemandeurDashboard'
@@ -32,9 +35,10 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/connexion" element={<LoginPage />} />
+          <Route path="/connexion-agent" element={<LoginAgentPage />} />
           <Route path="/inscription" element={<RegisterPage />} />
-          <Route path="/pmne" element={WIP('Module PMNE')()} />
-          <Route path="/contact" element={WIP('Contact')()} />
+          <Route path="/pmne" element={<PMNEPage />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="/actualites" element={WIP('Actualités')()} />
           <Route path="/actualites/:slug" element={WIP('Article')()} />
 
