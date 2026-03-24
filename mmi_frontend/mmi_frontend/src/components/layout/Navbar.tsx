@@ -58,7 +58,8 @@ export default function Navbar() {
             <img
               src="/images/logo_mmi.png"
               alt="Logo MMI"
-              className="h-10 w-10 object-contain rounded-full"
+              className="h-14 w-14 object-contain rounded-full border-2 border-white/40 shadow-md"
+              style={{ minWidth: 56, minHeight: 56 }}
               onError={e => {
                 (e.target as HTMLImageElement).style.display = 'none'
               }}

@@ -47,6 +47,11 @@ export default function HomePage() {
   const [loading, setLoading]       = useState(true)
   const [activeDoc, setActiveDoc]   = useState<'juridique' | 'projet' | 'annexe'>('juridique')
 
+  // ── Données statiques par défaut (affichées tant que la BDD n'est pas alimentée) ──
+  const STATS_DEFAUT = { total: 0, usines: 0, boulangeries: 0 }
+
+  const MARQUEURS_DEFAUT: GeoFeature[] = []
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -56,50 +61,38 @@ export default function HomePage() {
           autorisationsAPI.stats(),
         ])
         setActualites(actRes.data.results || actRes.data)
-        setFeatures(geoRes.data.features || [])
+        // Si l'API retourne des données, on les utilise. Sinon marqueurs par défaut.
+        const feats = geoRes.data.features || []
+        setFeatures(feats.length > 0 ? feats : MARQUEURS_DEFAUT)
         setStats(statsRes.data)
-      } catch { /* silencieux */ }
+      } catch {
+        // Backend pas encore lancé : utiliser les données statiques
+        setFeatures(MARQUEURS_DEFAUT)
+      }
       finally { setLoading(false) }
     }
     load()
   }, [])
 
-  const usines     = stats?.par_type.find(p => p.type === 'UNITE' || p.type === 'USINE_EAU')?.count || 244
-  const boulangeries = stats?.par_type.find(p => p.type === 'BP')?.count || 504
-  const total      = stats?.total || 748
+  const usines       = stats?.par_type.find(p => p.type === 'UNITE' || p.type === 'USINE_EAU')?.count ?? STATS_DEFAUT.usines
+  const boulangeries = stats?.par_type.find(p => p.type === 'BP')?.count ?? STATS_DEFAUT.boulangeries
+  const total        = stats?.total ?? STATS_DEFAUT.total
 
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* ── HERO BANNER ─────────────────────────────────────── */}
-      <div className="relative overflow-hidden" style={{ minHeight: 260 }}>
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: 'url(/images/banner_mmi.jpg)' }}
+      {/* ── HERO BANNER — image pure sans texte ──────────── */}
+      <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
+        <img
+          src="/images/banner_mmi.jpg"
+          alt="Ministère des Mines et de l'Industrie"
+          className="w-full h-full object-cover object-center block"
+          style={{ maxHeight: 320 }}
+          onError={e => {
+            const el = e.currentTarget
+            el.style.display = 'none'
+          }}
         />
-        <div className="hero-banner absolute inset-0" />
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-16 flex items-center">
-          <div className="flex-1">
-            <h1 className="text-3xl md:text-4xl font-bold text-white mb-2 font-arabic" dir="rtl">
-              {t('home.title')}
-            </h1>
-            <p className="text-lg md:text-xl font-bold text-white/90 tracking-wide mb-1">
-              {t('home.subtitle')}
-            </p>
-
-            <p className="text-white/70 text-sm">
-              {t('home.dgi')}
-            </p>
-          </div>
-          <div className="hidden md:block ml-8">
-            <img
-              src="/images/logo_mauritanie.png"
-              alt="Armoiries Mauritanie"
-              className="h-32 w-32 object-contain drop-shadow-2xl"
-              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-            />
-          </div>
-        </div>
       </div>
 
       {/* ── ACTUALITÉS ──────────────────────────────────────── */}
