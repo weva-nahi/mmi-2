@@ -83,7 +83,7 @@ export default function Navbar() {
                 - Agent connecté     → ce lien n'apparaît pas (ils ont leur propre espace) */}
             {!isAgent && (
               <Link
-                to={isDemandeur ? '/demandeur' : '/inscription'}
+                to={isDemandeur ? '/demandeur' : '/connexion'}
                 className="text-white font-semibold text-sm hover:text-yellow-200 transition-colors"
               >
                 {t('nav.autorisations')}
@@ -220,7 +220,7 @@ export default function Navbar() {
 
             {!isAgent && (
               <Link
-                to={isDemandeur ? '/demandeur' : '/inscription'}
+                to={isDemandeur ? '/demandeur' : '/connexion'}
                 className="block text-white font-medium py-2 px-3 rounded-lg hover:bg-white/10"
                 onClick={() => setMenuOpen(false)}
               >
