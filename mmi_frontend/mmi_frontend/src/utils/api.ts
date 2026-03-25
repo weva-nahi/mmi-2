@@ -70,7 +70,6 @@ export const typeDemandesAPI = {
 }
 
 export const autorisationsAPI = {
-  rechercher: (q: string) => api.get('/autorisations/', { params: { search: q } }),
   geojson: () => api.get('/autorisations/geojson/'),
   stats:   () => api.get('/autorisations/stats/'),
 }

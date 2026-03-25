@@ -28,8 +28,22 @@ export default function NouvelleDemandeWizard() {
     longitude: '',
   })
 
+  const [typesLoading, setTypesLoading] = useState(true)
+  const [typesError, setTypesError]     = useState(false)
+
   useEffect(() => {
-    typeDemandesAPI.list().then(r => setTypes(r.data.results || r.data)).catch(() => {})
+    setTypesLoading(true)
+    setTypesError(false)
+    typeDemandesAPI.list()
+      .then(r => {
+        const data = r.data.results || r.data
+        setTypes(data)
+        setTypesLoading(false)
+      })
+      .catch(() => {
+        setTypesError(true)
+        setTypesLoading(false)
+      })
   }, [])
 
   const up = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
@@ -129,44 +143,115 @@ export default function NouvelleDemandeWizard() {
         {step === 1 && (
           <div className="animate-fadeInUp">
             <h2 className="font-semibold text-gray-700 mb-5">Choisissez le type de demande</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {types.map(t => (
+
+            {/* Chargement */}
+            {typesLoading && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1,2,3,4,5].map(i => (
+                  <div key={i} className="h-32 bg-gray-100 rounded-xl animate-pulse" />
+                ))}
+              </div>
+            )}
+
+            {/* Erreur de connexion backend */}
+            {typesError && (
+              <div className="text-center py-10">
+                <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">⚠️</span>
+                </div>
+                <p className="font-semibold text-gray-700 mb-1">Impossible de charger les types de demande</p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Le serveur backend n'est pas accessible.<br />
+                  Assurez-vous que Django tourne sur <code className="bg-gray-100 px-1 rounded">http://localhost:8000</code>
+                </p>
                 <button
-                  key={t.id}
-                  onClick={() => setTypeChoisi(t)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all hover:shadow-sm
-                    ${typeChoisi?.id === t.id ? 'border-mmi-green bg-mmi-green-lt' : 'border-gray-200 hover:border-mmi-green'}`}
+                  onClick={() => {
+                    setTypesError(false)
+                    setTypesLoading(true)
+                    typeDemandesAPI.list()
+                      .then(r => { setTypes(r.data.results || r.data); setTypesLoading(false) })
+                      .catch(() => { setTypesError(true); setTypesLoading(false) })
+                  }}
+                  className="btn-primary text-sm"
                 >
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-3 h-3 rounded-full flex-shrink-0"
-                         style={{ background: TYPES_LABELS[t.code]?.color || '#888' }} />
-                    <span className="font-semibold text-sm text-gray-800">{t.libelle}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 ml-5">{TYPES_LABELS[t.code]?.desc}</p>
+                  🔄 Réessayer
                 </button>
-              ))}
+              </div>
+            )}
+
+            {/* Types chargés depuis la BD */}
+            {!typesLoading && !typesError && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {types.map(t => {
+                const info = TYPES_LABELS[t.code] || { color: '#888', desc: '', emoji: '📋' }
+                const isSelected = typeChoisi?.id === t.id
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTypeChoisi(t)}
+                    className={`p-5 rounded-xl border-2 text-left transition-all hover:shadow-md group
+                      ${isSelected
+                        ? 'border-2 bg-white shadow-md scale-[1.02]'
+                        : 'border-gray-200 hover:border-gray-300 bg-white'}`}
+                    style={{ borderColor: isSelected ? info.color : undefined }}
+                  >
+                    {/* Icône */}
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-3 transition-all"
+                         style={{ background: isSelected ? info.color + '20' : '#f3f4f6' }}>
+                      {info.emoji}
+                    </div>
+                    {/* Titre */}
+                    <p className="font-bold text-sm text-gray-800 mb-1 leading-snug">{t.libelle}</p>
+                    {/* Description */}
+                    <p className="text-xs text-gray-500 leading-relaxed">{info.desc}</p>
+                    {/* Badge sélectionné */}
+                    {isSelected && (
+                      <div className="flex items-center gap-1 mt-3 text-xs font-semibold"
+                           style={{ color: info.color }}>
+                        <CheckCircle size={13} />
+                        Sélectionné
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
             </div>
-            <div className="mt-6 flex justify-end">
-              {typeChoisi?.code === 'RENOUVELLEMENT' ? (
-                <button
-                  onClick={() => navigate('/demandeur/renouvellement')}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  Formulaire spécifique <ChevronRight size={16} />
+              
+            )}
+
+          <div className="mt-6 flex justify-end">
+              {typeChoisi?.code === 'BP' ? (
+                <button onClick={() => navigate('/demandeur/formulaire-bp')}
+                        className="btn-primary flex items-center gap-2"
+                        style={{ background: '#f97316' }}>
+                  Remplir le formulaire BP <ChevronRight size={16} />
+                </button>
+              ) : typeChoisi?.code === 'USINE_EAU' ? (
+                <button onClick={() => navigate('/demandeur/formulaire-usine-eau')}
+                        className="btn-primary flex items-center gap-2"
+                        style={{ background: '#3b82f6' }}>
+                  Remplir le formulaire Usine EAU <ChevronRight size={16} />
+                </button>
+              ) : typeChoisi?.code === 'UNITE' ? (
+                <button onClick={() => navigate('/demandeur/formulaire-unite')}
+                        className="btn-primary flex items-center gap-2">
+                  Remplir le formulaire Unité <ChevronRight size={16} />
+                </button>
+              ) : typeChoisi?.code === 'RENOUVELLEMENT' ? (
+                <button onClick={() => navigate('/demandeur/renouvellement')}
+                        className="btn-primary flex items-center gap-2"
+                        style={{ background: '#7c3aed' }}>
+                  Remplir le formulaire Renouvellement <ChevronRight size={16} />
                 </button>
               ) : typeChoisi?.code === 'EXTENSION' ? (
-                <button
-                  onClick={() => navigate('/demandeur/extension')}
-                  className="btn-primary flex items-center gap-2"
-                >
-                  Formulaire spécifique <ChevronRight size={16} />
+                <button onClick={() => navigate('/demandeur/extension')}
+                        className="btn-primary flex items-center gap-2"
+                        style={{ background: '#c2410c' }}>
+                  Remplir le formulaire Extension <ChevronRight size={16} />
                 </button>
               ) : (
-                <button
-                  disabled={!typeChoisi}
-                  onClick={() => setStep(2)}
-                  className="btn-primary flex items-center gap-2 disabled:opacity-40"
-                >
+                <button disabled={!typeChoisi} onClick={() => setStep(2)}
+                        className="btn-primary flex items-center gap-2 disabled:opacity-40">
                   Suivant <ChevronRight size={16} />
                 </button>
               )}

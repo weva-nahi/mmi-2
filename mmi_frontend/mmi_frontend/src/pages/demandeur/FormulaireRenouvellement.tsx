@@ -1,94 +1,144 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, ChevronLeft, CheckCircle, Save, Building2, User, FileText, MapPin, Settings, RefreshCw, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CheckCircle, AlertCircle, MapPin, Save } from 'lucide-react'
 import { demandesAPI } from '@/utils/api'
-import { useAuthStore } from '@/store/authStore'
 import toast from 'react-hot-toast'
 
-const WILAYAS = [
-  'Hodh Ech Chargui','Hodh El Gharbi','Assaba','Gorgol','Brakna','Trarza',
-  'Adrar','Dakhlet Nouadhibou','Tagant','Guidimaka','Tiris Zemmour',
-  'Inchiri','Nouakchott Nord','Nouakchott Ouest','Nouakchott Sud',
-]
-
-const FORMES = ['Établissement','SA','SARL','SNC','GIE','Autre']
-const ACTIVITES_TYPE = ['Agroalimentaire','Matériaux de construction','Chimie','Métallurgie','Textile','Eau','Autre']
-
 const SECTIONS = [
-  { id: 1, label: 'Identification',    icon: Building2 },
-  { id: 2, label: 'Dirigeant',         icon: User },
-  { id: 3, label: 'Localisation',      icon: MapPin },
-  { id: 4, label: 'Activité',          icon: Settings },
-  { id: 5, label: 'Situation actuelle',icon: RefreshCw },
-  { id: 6, label: 'Documents',         icon: FileText },
-  { id: 7, label: 'Confirmation',      icon: CheckCircle },
+  { id:1, label:'Identification' },
+  { id:2, label:'Adresse & Contact' },
+  { id:3, label:'Gestionnaire' },
+  { id:4, label:'Environnement juridique' },
+  { id:5, label:'Environnement administratif' },
+  { id:6, label:'Environnement économique' },
+  { id:7, label:'Défis & Confirmation' },
 ]
 
 export default function FormulaireRenouvellement() {
-  const navigate  = useNavigate()
-  const { user }  = useAuthStore()
+  const navigate = useNavigate()
   const [step, setStep]       = useState(1)
   const [saving, setSaving]   = useState(false)
-  const [files, setFiles]     = useState<Record<string, File>>({})
+  const [errors, setErrors]   = useState<string[]>([])
+  const [gpsLoading, setGpsLoading] = useState(false)
 
-  const [data, setData] = useState({
-    // Section 1 — Identification
-    raison_sociale: user?.nom_entreprise || '',
-    forme_juridique: '',
-    nif: '',
-    rccm: '',
-    date_creation: '',
-    capital_social: '',
-    // Section 2 — Dirigeant
-    dirigeant_nom: '',
-    dirigeant_prenom: '',
-    dirigeant_nationalite: '',
-    dirigeant_telephone: '',
-    dirigeant_email: '',
-    dirigeant_cin: '',
-    // Section 3 — Localisation
-    adresse: '',
-    wilaya: '',
-    commune: '',
-    telephone_siege: '',
-    latitude: '',
-    longitude: '',
-    // Section 4 — Activité
-    activite_principale: '',
-    activite_secondaire: '',
-    code_nace: '',
-    effectif_total: '',
-    effectif_femmes: '',
-    // Section 5 — Situation actuelle
-    num_autorisation_ancien: '',
-    date_autorisation_ancien: '',
-    capacite_production: '',
-    chiffre_affaires: '',
-    observations: '',
+  const [form, setForm] = useState({
+    // I. Identification
+    abreviation:            '',
+    denomination_complete:  '',
+    activite_principale:    '',
+    nationalite_entreprise: '',
+    // II. Adresse & Contact
+    localisation_siege:     '',
+    coordonnees_gps:        '',
+    latitude:               '',
+    longitude:              '',
+    bp:                     '',
+    telephone:              '',
+    email:                  '',
+    site_web:               '',
+    moyen_contact:          '', // poste / telephone / email
+    // III. Gestionnaire
+    nom_premier_responsable: '',
+    nni_passeport:           '',
+    nationalite_responsable: '',
+    telephone_responsable:   '',
+    // IV. Environnement juridique
+    forme_juridique:         '', // Etablissement / SA / SARL / Autre
+    forme_juridique_autre:   '',
+    statut_numero:           '',
+    statut_date:             '',
+    registre_commerce_num:   '',
+    registre_commerce_date:  '',
+    nif_numero:              '',
+    nif_date:                '',
+    cnss_numero:             '',
+    // V. Environnement administratif
+    numero_enregistrement:   '',
+    date_enregistrement:     '',
+    date_creation:           '',
+    date_debut_production:   '',
+    date_demarrage_unite:    '',
+    nombre_arrets:           '',
+    nombre_emplois_crees:    '',
+    nationalites_employes:   '',
+    nb_employes_admin:       '',
+    nb_techniciens:          '',
+    nb_ouvriers:             '',
+    // VI. Environnement économique
+    description_unite:       '',
+    capital_social:          '',
+    financement_fonds_propres:'',
+    financement_emprunt:     '',
+    origine_investissement:  '', // National / International / Les deux
+    nature_investissement:   '', // Nouvelle création / Extension / Modernisation
+    donnees_financieres_2023:'',
+    donnees_financieres_2024:'',
+    matieres_premieres:      '',
+    capacite_production_jour:'',
+    capacite_production_mois:'',
+    capacite_production_an:  '',
+    production_effective_jour:'',
+    stock:                   '',
+    varietes_production:     '',
+    capacite_estimee:        '',
+    capacite_augmentation:   '',
+    // VII. Défis
+    principales_difficultes: '',
   })
 
-  const up = (k: string, v: string) => setData(p => ({ ...p, [k]: v }))
-  const addFile = (k: string, f: File) => setFiles(p => ({ ...p, [k]: f }))
+  const up = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
+
+  const localiserGPS = () => {
+    if (!navigator.geolocation) return
+    setGpsLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const lat = pos.coords.latitude.toFixed(6)
+        const lon = pos.coords.longitude.toFixed(6)
+        up('latitude',  lat)
+        up('longitude', lon)
+        up('coordonnees_gps', `${lat}, ${lon}`)
+        setGpsLoading(false)
+        toast.success('Position GPS capturée !')
+      },
+      () => { toast.error('Impossible d\'obtenir la position'); setGpsLoading(false) },
+      { enableHighAccuracy: true, timeout: 15000 }
+    )
+  }
+
+  const validate = (): string[] => {
+    const errs: string[] = []
+    if (!form.denomination_complete)   errs.push('Dénomination complète obligatoire')
+    if (!form.activite_principale)     errs.push('Activité principale obligatoire')
+    if (!form.localisation_siege)      errs.push('Localisation du siège obligatoire')
+    if (!form.telephone)               errs.push('Téléphone obligatoire')
+    if (!form.nom_premier_responsable) errs.push('Nom du premier responsable obligatoire')
+    if (!form.nni_passeport)           errs.push('NNI et N° Passeport obligatoires')
+    if (!form.forme_juridique)         errs.push('Forme juridique obligatoire')
+    if (!form.numero_enregistrement)   errs.push('Numéro d\'enregistrement obligatoire')
+    return errs
+  }
 
   const handleSubmit = async () => {
+    const errs = validate()
+    if (errs.length > 0) { setErrors(errs); setStep(1); return }
+    setErrors([])
     setSaving(true)
     try {
       const { data: res } = await demandesAPI.create({
         type_demande_code: 'RENOUVELLEMENT',
-        ...data,
-        formulaire_specifique: data,
+        raison_sociale:    form.denomination_complete,
+        activite:          form.activite_principale,
+        adresse:           form.localisation_siege,
+        wilaya:            '',
+        latitude:          form.latitude  || null,
+        longitude:         form.longitude || null,
+        formulaire_specifique: form,
       })
-      // Upload fichiers
-      for (const [key, file] of Object.entries(files)) {
-        const fd = new FormData()
-        fd.append('fichier', file)
-        fd.append('piece_nom', key)
-        await demandesAPI.uploadPiece(res.id, fd)
-      }
-      toast.success(`Demande ${res.numero_ref} soumise !`)
+      toast.success(`✅ Demande de renouvellement ${res.numero_ref} soumise !`)
       navigate('/demandeur/demandes')
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Erreur')
+      toast.error(err.response?.data?.detail || 'Erreur lors de la soumission')
     } finally {
       setSaving(false)
     }
@@ -96,31 +146,47 @@ export default function FormulaireRenouvellement() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(-1)} className="text-sm text-gray-500 hover:text-mmi-green flex items-center gap-1">
-          <ChevronLeft size={16} /> Retour
-        </button>
-        <span className="text-gray-300">/</span>
-        <span className="font-semibold text-gray-700">Renouvellement d'enregistrement industriel</span>
+      {/* En-tête officiel */}
+      <div className="bg-mmi-green-lt border border-green-200 rounded-xl p-4 mb-6 text-center">
+        <p className="text-xs text-gray-500">République Islamique de Mauritanie — Honneur, Fraternité, Justice</p>
+        <p className="text-xs font-semibold text-mmi-green">MINISTÈRE DES MINES ET DE L'INDUSTRIE</p>
+        <p className="text-xs text-gray-600">Direction Générale de l'Industrie / DDPI</p>
+        <h2 className="font-bold text-gray-800 mt-2 text-sm">
+          FORMULAIRE DE RENOUVELLEMENT D'ENREGISTREMENT D'ENTREPRISE INDUSTRIELLE / 2025
+        </h2>
       </div>
 
+      <button onClick={() => navigate('/demandeur/nouvelle')}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-mmi-green mb-6">
+        <ChevronLeft size={16} /> Retour
+      </button>
+
+      {/* Erreurs */}
+      {errors.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">
+          <div className="flex items-center gap-2 text-red-700 font-semibold text-sm mb-2">
+            <AlertCircle size={16} /> Champs obligatoires manquants
+          </div>
+          <ul className="space-y-1">
+            {errors.map((e, i) => <li key={i} className="text-xs text-red-600">• {e}</li>)}
+          </ul>
+        </div>
+      )}
+
       {/* Barre de progression */}
-      <div className="flex items-center gap-1 mb-8 overflow-x-auto pb-2">
+      <div className="flex items-center gap-1 mb-8 overflow-x-auto pb-1">
         {SECTIONS.map((s, i) => (
           <React.Fragment key={s.id}>
             <div className="flex flex-col items-center gap-1 flex-shrink-0">
-              <button
-                onClick={() => step > s.id && setStep(s.id)}
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all
-                  ${step > s.id  ? 'bg-mmi-green text-white cursor-pointer hover:bg-mmi-green-mid'
-                  : step === s.id ? 'bg-mmi-green text-white ring-4 ring-mmi-green/20'
-                  : 'bg-gray-100 text-gray-400'}`}
-              >
-                {step > s.id ? <CheckCircle size={14} /> : s.id}
+              <button onClick={() => step > s.id && setStep(s.id)}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all
+                        ${step > s.id  ? 'bg-mmi-green text-white cursor-pointer' :
+                          step === s.id ? 'bg-mmi-green text-white ring-4 ring-mmi-green/20' :
+                          'bg-gray-100 text-gray-400'}`}>
+                {step > s.id ? <CheckCircle size={12} /> : s.id}
               </button>
-              <span className={`text-xs whitespace-nowrap hidden sm:block ${step === s.id ? 'text-mmi-green font-medium' : 'text-gray-400'}`}>
-                {s.label}
-              </span>
+              <span className={`text-xs whitespace-nowrap hidden md:block
+                ${step === s.id ? 'text-mmi-green font-medium' : 'text-gray-400'}`}>{s.label}</span>
             </div>
             {i < SECTIONS.length - 1 && (
               <div className={`flex-1 h-0.5 mb-4 ${step > s.id ? 'bg-mmi-green' : 'bg-gray-200'}`} />
@@ -131,158 +197,400 @@ export default function FormulaireRenouvellement() {
 
       <div className="card p-6">
 
-        {/* ── Section 1 : Identification ── */}
+        {/* ── I. Identification ── */}
         {step === 1 && (
           <div className="space-y-4 animate-fadeInUp">
-            <SectionTitle icon={Building2} title="Identification de l'entreprise" />
-            <Grid2>
-              <Field label="Raison sociale *" value={data.raison_sociale} onChange={v => up('raison_sociale', v)} />
-              <Field label="Forme juridique *" type="select" options={FORMES}
-                     value={data.forme_juridique} onChange={v => up('forme_juridique', v)} />
-              <Field label="NIF *" value={data.nif} onChange={v => up('nif', v)} placeholder="Ex: 00123456789" />
-              <Field label="RCCM" value={data.rccm} onChange={v => up('rccm', v)} placeholder="Ex: MR-NKC-2020-B-1234" />
-              <Field label="Date de création *" type="date" value={data.date_creation} onChange={v => up('date_creation', v)} />
-              <Field label="Capital social (MRU)" value={data.capital_social} onChange={v => up('capital_social', v)} placeholder="Ex: 1000000" />
-            </Grid2>
+            <SH num="I" title="Identification de l'entreprise" />
+            <Row label="Abréviation">
+              <input className="form-input" value={form.abreviation}
+                     onChange={e => up('abreviation', e.target.value)}
+                     placeholder="Ex: SMCI" />
+            </Row>
+            <Row label="Dénomination complète *">
+              <input className="form-input" value={form.denomination_complete}
+                     onChange={e => up('denomination_complete', e.target.value)} required />
+            </Row>
+            <Row label="Activité principale *">
+              <input className="form-input" value={form.activite_principale}
+                     onChange={e => up('activite_principale', e.target.value)} required />
+            </Row>
+            <Row label="Nationalité de l'entreprise">
+              <input className="form-input" value={form.nationalite_entreprise}
+                     onChange={e => up('nationalite_entreprise', e.target.value)}
+                     placeholder="Ex: Mauritanienne" />
+            </Row>
           </div>
         )}
 
-        {/* ── Section 2 : Dirigeant ── */}
+        {/* ── II. Adresse & Contact ── */}
         {step === 2 && (
           <div className="space-y-4 animate-fadeInUp">
-            <SectionTitle icon={User} title="Informations du dirigeant" />
-            <Grid2>
-              <Field label="Nom *" value={data.dirigeant_nom} onChange={v => up('dirigeant_nom', v)} />
-              <Field label="Prénom *" value={data.dirigeant_prenom} onChange={v => up('dirigeant_prenom', v)} />
-              <Field label="Nationalité *" value={data.dirigeant_nationalite} onChange={v => up('dirigeant_nationalite', v)} placeholder="Ex: Mauritanienne" />
-              <Field label="N° CIN / Passeport *" value={data.dirigeant_cin} onChange={v => up('dirigeant_cin', v)} />
-              <Field label="Téléphone *" type="tel" value={data.dirigeant_telephone} onChange={v => up('dirigeant_telephone', v)} placeholder="+222 XX XX XX XX" />
-              <Field label="Email" type="email" value={data.dirigeant_email} onChange={v => up('dirigeant_email', v)} />
-            </Grid2>
+            <SH num="II" title="Adresse et contact de l'entreprise" />
+            <Row label="Localisation du siège *">
+              <textarea className="form-input resize-none" rows={2} value={form.localisation_siege}
+                        onChange={e => up('localisation_siege', e.target.value)} required />
+            </Row>
+
+            {/* GPS */}
+            <div>
+              <label className="form-label">Coordonnées GPS</label>
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                <div>
+                  <input className="form-input" placeholder="Latitude (ex: 18.0735)"
+                         value={form.latitude}
+                         onChange={e => { up('latitude', e.target.value); up('coordonnees_gps', `${e.target.value}, ${form.longitude}`) }} />
+                </div>
+                <div>
+                  <input className="form-input" placeholder="Longitude (ex: -15.9582)"
+                         value={form.longitude}
+                         onChange={e => { up('longitude', e.target.value); up('coordonnees_gps', `${form.latitude}, ${e.target.value}`) }} />
+                </div>
+              </div>
+              <button type="button" onClick={localiserGPS} disabled={gpsLoading}
+                      className="flex items-center gap-2 bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700">
+                {gpsLoading ? <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <MapPin size={12} />}
+                {form.latitude ? '✅ Capturé — Relocaliser' : 'Capturer GPS automatiquement'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Row label="B.P.">
+                <input className="form-input" placeholder="Ex: BP 1234"
+                       value={form.bp} onChange={e => up('bp', e.target.value)} />
+              </Row>
+              <Row label="Téléphone *">
+                <input className="form-input" type="tel" placeholder="+222 XX XX XX XX"
+                       value={form.telephone} onChange={e => up('telephone', e.target.value)} required />
+              </Row>
+              <Row label="E-mail">
+                <input className="form-input" type="email"
+                       value={form.email} onChange={e => up('email', e.target.value)} />
+              </Row>
+              <Row label="Site web">
+                <input className="form-input" placeholder="www.entreprise.mr"
+                       value={form.site_web} onChange={e => up('site_web', e.target.value)} />
+              </Row>
+            </div>
+            <div>
+              <label className="form-label">Moyen de contact favorisé</label>
+              <div className="flex gap-4 mt-1">
+                {['Poste', 'Téléphone', 'E-mail'].map(m => (
+                  <label key={m} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="radio" name="moyen_contact" value={m}
+                           checked={form.moyen_contact === m}
+                           onChange={e => up('moyen_contact', e.target.value)} />
+                    {m}
+                  </label>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
-        {/* ── Section 3 : Localisation ── */}
+        {/* ── III. Gestionnaire ── */}
         {step === 3 && (
           <div className="space-y-4 animate-fadeInUp">
-            <SectionTitle icon={MapPin} title="Localisation de l'établissement" />
-            <Grid2>
-              <div className="col-span-2">
-                <Field label="Adresse complète *" value={data.adresse} onChange={v => up('adresse', v)} />
-              </div>
-              <Field label="Wilaya *" type="select" options={WILAYAS}
-                     value={data.wilaya} onChange={v => up('wilaya', v)} />
-              <Field label="Commune / Moughataa" value={data.commune} onChange={v => up('commune', v)} />
-              <Field label="Téléphone siège" type="tel" value={data.telephone_siege} onChange={v => up('telephone_siege', v)} />
-              <Field label="Latitude GPS" value={data.latitude} onChange={v => up('latitude', v)} placeholder="Ex: 18.0764" />
-              <Field label="Longitude GPS" value={data.longitude} onChange={v => up('longitude', v)} placeholder="Ex: -15.9785" />
-            </Grid2>
+            <SH num="III" title="Information du Gestionnaire de l'entreprise" />
+            <Row label="Nom du premier responsable *">
+              <input className="form-input" value={form.nom_premier_responsable}
+                     onChange={e => up('nom_premier_responsable', e.target.value)} required />
+            </Row>
+            <Row label="N.N.I et N° Passeport *">
+              <input className="form-input" placeholder="Ex: 1234567890123 / P1234567"
+                     value={form.nni_passeport}
+                     onChange={e => up('nni_passeport', e.target.value)} required />
+            </Row>
+            <Row label="Nationalité">
+              <input className="form-input" placeholder="Ex: Mauritanienne"
+                     value={form.nationalite_responsable}
+                     onChange={e => up('nationalite_responsable', e.target.value)} />
+            </Row>
+            <Row label="Téléphone">
+              <input className="form-input" type="tel"
+                     value={form.telephone_responsable}
+                     onChange={e => up('telephone_responsable', e.target.value)} />
+            </Row>
           </div>
         )}
 
-        {/* ── Section 4 : Activité ── */}
+        {/* ── IV. Environnement juridique ── */}
         {step === 4 && (
           <div className="space-y-4 animate-fadeInUp">
-            <SectionTitle icon={Settings} title="Activité industrielle" />
-            <Grid2>
-              <Field label="Activité principale *" type="select" options={ACTIVITES_TYPE}
-                     value={data.activite_principale} onChange={v => up('activite_principale', v)} />
-              <Field label="Activité secondaire" value={data.activite_secondaire} onChange={v => up('activite_secondaire', v)} />
-              <Field label="Code NACE / NAC" value={data.code_nace} onChange={v => up('code_nace', v)} placeholder="Ex: C10.1" />
-              <Field label="Effectif total (employés)" type="number" value={data.effectif_total} onChange={v => up('effectif_total', v)} />
-              <Field label="Dont femmes" type="number" value={data.effectif_femmes} onChange={v => up('effectif_femmes', v)} />
-            </Grid2>
+            <SH num="IV" title="Environnement juridique de l'entreprise" />
+            <div>
+              <label className="form-label">Forme juridique *</label>
+              <div className="flex flex-wrap gap-3 mt-1">
+                {['Etablissement', 'SA', 'SARL', 'Autre'].map(f => (
+                  <label key={f} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="radio" name="forme_juridique" value={f}
+                           checked={form.forme_juridique === f}
+                           onChange={e => up('forme_juridique', e.target.value)} />
+                    {f}
+                  </label>
+                ))}
+              </div>
+              {form.forme_juridique === 'Autre' && (
+                <input className="form-input mt-2" placeholder="Précisez la forme juridique"
+                       value={form.forme_juridique_autre}
+                       onChange={e => up('forme_juridique_autre', e.target.value)} />
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Row label="Status — N°">
+                <input className="form-input" placeholder="Numéro"
+                       value={form.statut_numero} onChange={e => up('statut_numero', e.target.value)} />
+              </Row>
+              <Row label="Status — Date">
+                <input className="form-input" type="date"
+                       value={form.statut_date} onChange={e => up('statut_date', e.target.value)} />
+              </Row>
+              <Row label="Registre du Commerce — N°">
+                <input className="form-input" placeholder="Numéro RC"
+                       value={form.registre_commerce_num} onChange={e => up('registre_commerce_num', e.target.value)} />
+              </Row>
+              <Row label="Registre du Commerce — Date">
+                <input className="form-input" type="date"
+                       value={form.registre_commerce_date} onChange={e => up('registre_commerce_date', e.target.value)} />
+              </Row>
+              <Row label="N.I.F — N°">
+                <input className="form-input" placeholder="Numéro NIF"
+                       value={form.nif_numero} onChange={e => up('nif_numero', e.target.value)} />
+              </Row>
+              <Row label="N.I.F — Date">
+                <input className="form-input" type="date"
+                       value={form.nif_date} onChange={e => up('nif_date', e.target.value)} />
+              </Row>
+              <Row label="CNSS — N°">
+                <input className="form-input" placeholder="Numéro CNSS"
+                       value={form.cnss_numero} onChange={e => up('cnss_numero', e.target.value)} />
+              </Row>
+            </div>
           </div>
         )}
 
-        {/* ── Section 5 : Situation actuelle ── */}
+        {/* ── V. Environnement administratif ── */}
         {step === 5 && (
           <div className="space-y-4 animate-fadeInUp">
-            <SectionTitle icon={RefreshCw} title="Situation de l'enregistrement actuel" />
-            <Grid2>
-              <Field label="N° autorisation à renouveler *" value={data.num_autorisation_ancien}
-                     onChange={v => up('num_autorisation_ancien', v)} placeholder="Ex: MMI-2020-00123" />
-              <Field label="Date de l'autorisation *" type="date" value={data.date_autorisation_ancien}
-                     onChange={v => up('date_autorisation_ancien', v)} />
-              <Field label="Capacité de production actuelle" value={data.capacite_production}
-                     onChange={v => up('capacite_production', v)} placeholder="Ex: 500 tonnes/an" />
-              <Field label="Chiffre d'affaires annuel (MRU)" value={data.chiffre_affaires}
-                     onChange={v => up('chiffre_affaires', v)} />
-            </Grid2>
-            <div>
-              <label className="form-label">Observations / Changements depuis la dernière autorisation</label>
-              <textarea className="form-input resize-none" rows={3}
-                        value={data.observations} onChange={e => up('observations', e.target.value)}
-                        placeholder="Décrire les changements intervenus..." />
+            <SH num="V" title="Environnement Administratif de l'entreprise" />
+            <div className="grid grid-cols-2 gap-4">
+              <Row label="Numéro d'enregistrement de l'usine *">
+                <input className="form-input" placeholder="N°..."
+                       value={form.numero_enregistrement}
+                       onChange={e => up('numero_enregistrement', e.target.value)} required />
+              </Row>
+              <Row label="Date d'enregistrement">
+                <input className="form-input" type="date"
+                       value={form.date_enregistrement}
+                       onChange={e => up('date_enregistrement', e.target.value)} />
+              </Row>
+              <Row label="Date de la création">
+                <input className="form-input" type="date"
+                       value={form.date_creation}
+                       onChange={e => up('date_creation', e.target.value)} />
+              </Row>
+              <Row label="Date de début de la production">
+                <input className="form-input" type="date"
+                       value={form.date_debut_production}
+                       onChange={e => up('date_debut_production', e.target.value)} />
+              </Row>
+              <Row label="Date de démarrage de l'Unité">
+                <input className="form-input" type="date"
+                       value={form.date_demarrage_unite}
+                       onChange={e => up('date_demarrage_unite', e.target.value)} />
+              </Row>
+              <Row label="Nombre d'arrêts">
+                <input className="form-input" type="number"
+                       value={form.nombre_arrets}
+                       onChange={e => up('nombre_arrets', e.target.value)} />
+              </Row>
+              <Row label="Nombre d'emplois créés">
+                <input className="form-input" type="number"
+                       value={form.nombre_emplois_crees}
+                       onChange={e => up('nombre_emplois_crees', e.target.value)} />
+              </Row>
+              <Row label="Nationalités des employés">
+                <input className="form-input" placeholder="Ex: Mauritanienne, Sénégalaise"
+                       value={form.nationalites_employes}
+                       onChange={e => up('nationalites_employes', e.target.value)} />
+              </Row>
+              <Row label="Nombre d'employés administratifs">
+                <input className="form-input" type="number"
+                       value={form.nb_employes_admin}
+                       onChange={e => up('nb_employes_admin', e.target.value)} />
+              </Row>
+              <Row label="Nombre de techniciens">
+                <input className="form-input" type="number"
+                       value={form.nb_techniciens}
+                       onChange={e => up('nb_techniciens', e.target.value)} />
+              </Row>
+              <Row label="Nombre d'ouvriers">
+                <input className="form-input" type="number"
+                       value={form.nb_ouvriers}
+                       onChange={e => up('nb_ouvriers', e.target.value)} />
+              </Row>
             </div>
           </div>
         )}
 
-        {/* ── Section 6 : Documents ── */}
+        {/* ── VI. Environnement économique ── */}
         {step === 6 && (
           <div className="space-y-4 animate-fadeInUp">
-            <SectionTitle icon={FileText} title="Pièces justificatives" />
-            <p className="text-xs text-gray-500">Formats acceptés : PDF, JPG, PNG — max 10 Mo par fichier</p>
-            <div className="space-y-3">
-              {[
-                { key: 'registre_commerce', label: 'Registre de commerce (RCCM)', obligatoire: true },
-                { key: 'attestation_nif',   label: 'Attestation NIF', obligatoire: true },
-                { key: 'ancienne_auto',      label: 'Ancienne autorisation à renouveler', obligatoire: true },
-                { key: 'plan_masse',         label: 'Plan de masse / Plan de situation', obligatoire: false },
-                { key: 'bilan',              label: 'Dernier bilan comptable', obligatoire: false },
-                { key: 'attestation_cnss',   label: 'Attestation de régularité CNSS', obligatoire: false },
-              ].map(doc => (
-                <label key={doc.key}
-                  className={`flex items-center gap-3 p-3.5 rounded-xl border-2 border-dashed cursor-pointer transition-all
-                    ${files[doc.key] ? 'border-mmi-green bg-mmi-green-lt' : 'border-gray-200 hover:border-mmi-green'}`}>
-                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                         onChange={e => e.target.files?.[0] && addFile(doc.key, e.target.files[0])} />
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0
-                    ${files[doc.key] ? 'bg-mmi-green' : 'bg-gray-100'}`}>
-                    {files[doc.key]
-                      ? <CheckCircle size={16} className="text-white" />
-                      : <Upload size={16} className="text-gray-400" />
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm font-medium ${files[doc.key] ? 'text-mmi-green' : 'text-gray-700'}`}>
-                      {doc.label}
-                      {doc.obligatoire && <span className="text-red-500 ml-1">*</span>}
-                    </p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {files[doc.key] ? files[doc.key].name : 'Cliquer pour choisir'}
-                    </p>
-                  </div>
-                </label>
-              ))}
+            <SH num="VI" title="Environnement Economique de l'entreprise" />
+            <Row label="Description de l'unité de production">
+              <textarea className="form-input resize-none" rows={2}
+                        value={form.description_unite}
+                        onChange={e => up('description_unite', e.target.value)} />
+            </Row>
+            <div className="grid grid-cols-2 gap-4">
+              <Row label="Capital Social (MRU)">
+                <input className="form-input" placeholder="Ex: 1000000"
+                       value={form.capital_social} onChange={e => up('capital_social', e.target.value)} />
+              </Row>
+              <Row label="Financement — Fonds propres (MRU)">
+                <input className="form-input" type="number"
+                       value={form.financement_fonds_propres}
+                       onChange={e => up('financement_fonds_propres', e.target.value)} />
+              </Row>
+              <Row label="Financement — Emprunt (MRU)">
+                <input className="form-input" type="number"
+                       value={form.financement_emprunt}
+                       onChange={e => up('financement_emprunt', e.target.value)} />
+              </Row>
             </div>
+
+            <div>
+              <label className="form-label">Origine de l'investissement</label>
+              <div className="flex gap-4 mt-1">
+                {['National', 'International', 'National et International'].map(o => (
+                  <label key={o} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="radio" name="origine_investissement" value={o}
+                           checked={form.origine_investissement === o}
+                           onChange={e => up('origine_investissement', e.target.value)} />
+                    {o}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="form-label">Nature de l'investissement</label>
+              <div className="flex gap-4 mt-1">
+                {['Nouvelle création', 'Extension', 'Modernisation'].map(n => (
+                  <label key={n} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="radio" name="nature_investissement" value={n}
+                           checked={form.nature_investissement === n}
+                           onChange={e => up('nature_investissement', e.target.value)} />
+                    {n}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Row label="Données états financiers 2023">
+                <input className="form-input" value={form.donnees_financieres_2023}
+                       onChange={e => up('donnees_financieres_2023', e.target.value)} />
+              </Row>
+              <Row label="Données états financiers 2024">
+                <input className="form-input" value={form.donnees_financieres_2024}
+                       onChange={e => up('donnees_financieres_2024', e.target.value)} />
+              </Row>
+            </div>
+
+            <Row label="Matières premières">
+              <input className="form-input" placeholder="Listez les matières premières utilisées"
+                     value={form.matieres_premieres}
+                     onChange={e => up('matieres_premieres', e.target.value)} />
+            </Row>
+
+            <div className="grid grid-cols-3 gap-3">
+              <Row label="Capacité production / jour (Tonnes)">
+                <input className="form-input" type="number"
+                       value={form.capacite_production_jour}
+                       onChange={e => up('capacite_production_jour', e.target.value)} />
+              </Row>
+              <Row label="Capacité production / mois (Tonnes)">
+                <input className="form-input" type="number"
+                       value={form.capacite_production_mois}
+                       onChange={e => up('capacite_production_mois', e.target.value)} />
+              </Row>
+              <Row label="Capacité production / an (Tonnes)">
+                <input className="form-input" type="number"
+                       value={form.capacite_production_an}
+                       onChange={e => up('capacite_production_an', e.target.value)} />
+              </Row>
+              <Row label="Production effective / jour (Tonnes)">
+                <input className="form-input" type="number"
+                       value={form.production_effective_jour}
+                       onChange={e => up('production_effective_jour', e.target.value)} />
+              </Row>
+              <Row label="Stock (Tonnes)">
+                <input className="form-input" type="number"
+                       value={form.stock}
+                       onChange={e => up('stock', e.target.value)} />
+              </Row>
+              <Row label="Capacité estimée (Tonnes/jour)">
+                <input className="form-input" type="number"
+                       value={form.capacite_estimee}
+                       onChange={e => up('capacite_estimee', e.target.value)} />
+              </Row>
+              <Row label="Capacité d'augmentation (Tonnes/jour)">
+                <input className="form-input" type="number"
+                       value={form.capacite_augmentation}
+                       onChange={e => up('capacite_augmentation', e.target.value)} />
+              </Row>
+            </div>
+
+            <Row label="Les variétés de production (1, 2, 3, 4...)">
+              <input className="form-input"
+                     placeholder="Ex: 1-Huile de palme  2-Savon  3-Margarine"
+                     value={form.varietes_production}
+                     onChange={e => up('varietes_production', e.target.value)} />
+            </Row>
           </div>
         )}
 
-        {/* ── Section 7 : Confirmation ── */}
+        {/* ── VII. Défis & Confirmation ── */}
         {step === 7 && (
-          <div className="animate-fadeInUp">
-            <SectionTitle icon={CheckCircle} title="Récapitulatif de la demande" />
-            <div className="space-y-2 mb-6">
-              {[
-                ['Raison sociale',        data.raison_sociale],
-                ['Forme juridique',       data.forme_juridique],
-                ['NIF',                   data.nif],
-                ['Dirigeant',             `${data.dirigeant_nom} ${data.dirigeant_prenom}`],
-                ['Wilaya',                data.wilaya],
-                ['Activité',              data.activite_principale],
-                ['N° autorisation',       data.num_autorisation_ancien],
-                ['Documents joints',      `${Object.keys(files).length} fichier(s)`],
-              ].map(([k, v]) => (
-                <div key={k as string} className="flex gap-4 text-sm py-2 border-b border-gray-50">
-                  <span className="text-gray-400 w-36 flex-shrink-0">{k}</span>
-                  <span className="font-medium text-gray-800">{v || '—'}</span>
-                </div>
-              ))}
+          <div className="space-y-5 animate-fadeInUp">
+            <SH num="VII" title="Défis" />
+            <Row label="Principales difficultés rencontrées">
+              <textarea className="form-input resize-none" rows={5}
+                        placeholder="Décrivez les principales difficultés de l'entreprise..."
+                        value={form.principales_difficultes}
+                        onChange={e => up('principales_difficultes', e.target.value)} />
+            </Row>
+
+            {/* Récapitulatif */}
+            <div className="border-t border-gray-100 pt-4">
+              <p className="font-semibold text-gray-700 text-sm mb-3">Récapitulatif</p>
+              <div className="space-y-1.5">
+                {[
+                  ['Dénomination',        form.denomination_complete],
+                  ['Activité',            form.activite_principale],
+                  ['Siège',               form.localisation_siege],
+                  ['Téléphone',           form.telephone],
+                  ['Gestionnaire',        form.nom_premier_responsable],
+                  ['NNI / Passeport',     form.nni_passeport],
+                  ['Forme juridique',     form.forme_juridique],
+                  ['N° Enregistrement',   form.numero_enregistrement],
+                  ['Capital social',      form.capital_social ? `${form.capital_social} MRU` : '—'],
+                  ['Emplois créés',       form.nombre_emplois_crees || '—'],
+                  ['GPS',                 form.latitude ? `${form.latitude}, ${form.longitude}` : 'Non renseigné'],
+                ].map(([k, v]) => (
+                  <div key={k as string} className="flex gap-3 text-xs py-1.5 border-b border-gray-50">
+                    <span className="text-gray-400 w-36 flex-shrink-0">{k}</span>
+                    <span className="font-medium text-gray-800">{v || '—'}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700 mb-5">
-              En soumettant cette demande, je certifie l'exactitude des informations fournies et m'engage à respecter
-              la réglementation industrielle mauritanienne en vigueur.
+
+            <div className="bg-mmi-green-lt border border-green-200 rounded-xl p-4 text-xs text-green-700">
+              <p className="font-semibold mb-1">Déclaration sur l'honneur</p>
+              <p>Je soussigné(e), certifie l'exactitude des informations fournies dans ce formulaire
+              de renouvellement d'enregistrement industriel 2025.</p>
+              <p className="mt-2 text-gray-500">Nouakchott, le {new Date().toLocaleDateString('fr-FR')}</p>
             </div>
           </div>
         )}
@@ -296,16 +604,25 @@ export default function FormulaireRenouvellement() {
             </button>
           )}
           {step < 7 ? (
-            <button onClick={() => setStep(s => s + 1)}
-                    className="btn-primary flex items-center gap-1.5 ml-auto">
+            <button
+              onClick={() => setStep(s => s + 1)}
+              disabled={
+                (step === 1 && !form.denomination_complete) ||
+                (step === 2 && !form.telephone) ||
+                (step === 3 && !form.nom_premier_responsable) ||
+                (step === 4 && !form.forme_juridique) ||
+                (step === 5 && !form.numero_enregistrement)
+              }
+              className="btn-primary flex items-center gap-1.5 ml-auto disabled:opacity-40"
+            >
               Suivant <ChevronRight size={16} />
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={saving}
-                    className="btn-primary flex items-center justify-center gap-2 flex-1">
+                    className="btn-primary flex-1 flex items-center justify-center gap-2">
               {saving
                 ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                : <><Save size={16} /> Soumettre la demande</>
+                : <><Save size={16} /> Soumettre le formulaire de renouvellement</>
               }
             </button>
           )}
@@ -315,38 +632,22 @@ export default function FormulaireRenouvellement() {
   )
 }
 
-// ── Composants utilitaires ────────────────────────────────────
-function SectionTitle({ icon: Icon, title }: { icon: any; title: string }) {
+function SH({ num, title }: { num: string; title: string }) {
   return (
-    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-100">
-      <div className="w-8 h-8 bg-mmi-green-lt rounded-lg flex items-center justify-center">
-        <Icon size={16} className="text-mmi-green" />
-      </div>
-      <h2 className="font-bold text-gray-800">{title}</h2>
+    <div className="flex items-center gap-2 mb-3 pb-3 border-b border-gray-100">
+      <span className="w-7 h-7 rounded-full bg-mmi-green text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+        {num}
+      </span>
+      <h2 className="font-bold text-gray-800 text-sm">{title}</h2>
     </div>
   )
 }
 
-function Grid2({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{children}</div>
-}
-
-function Field({ label, value, onChange, type = 'text', options, placeholder, className = '' }: {
-  label: string; value: string; onChange: (v: string) => void
-  type?: string; options?: string[]; placeholder?: string; className?: string
-}) {
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className={className}>
-      <label className="form-label">{label}</label>
-      {type === 'select' ? (
-        <select className="form-input" value={value} onChange={e => onChange(e.target.value)}>
-          <option value="">-- Sélectionner --</option>
-          {options?.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      ) : (
-        <input type={type} className="form-input" value={value}
-               onChange={e => onChange(e.target.value)} placeholder={placeholder} />
-      )}
+    <div>
+      <label className="form-label text-xs">{label}</label>
+      {children}
     </div>
   )
 }
