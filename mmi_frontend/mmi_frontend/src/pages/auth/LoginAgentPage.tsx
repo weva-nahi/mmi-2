@@ -80,7 +80,7 @@ export default function LoginAgentPage() {
                 <input
                   type="email"
                   className="form-input pl-10"
-                  placeholder="votre.email@mmi.gov.mr"
+                  placeholder="     votre.email@mmi.gov.mr "
                   value={form.email}
                   onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
                   required

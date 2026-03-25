@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Clock, User, FileText, Send, CheckCircle, XCircle, MapPin, Download } from 'lucide-react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Clock, User, FileText, Send, CheckCircle, XCircle, MapPin, Download, ExternalLink } from 'lucide-react'
 import { demandesAPI } from '@/utils/api'
 import { useAuthStore } from '@/store/authStore'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -49,6 +49,7 @@ interface Props {
 
 export default function DossierDetail({ backLink, backLabel, actionsDisponibles }: Props) {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuthStore()
   const [demande, setDemande] = useState<Demande | null>(null)
   const [loading, setLoading] = useState(true)
@@ -66,6 +67,15 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
 
   const handleAction = async (etape_code: string, action: string) => {
     if (!demande) return
+
+    // Commentaire obligatoire pour rejet et dossier incomplet
+    if (['DDPI_INCOMPLET', 'DDPI_REJET'].includes(etape_code) && !commentaire.trim()) {
+      import('react-hot-toast').then(({ default: toast }) =>
+        toast.error('Le motif est obligatoire pour cette action — le demandeur en sera informé.')
+      )
+      return
+    }
+
     setTransmitting(true)
     try {
       await demandesAPI.transmettre(demande.id, {
@@ -281,6 +291,36 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
 
         {/* Colonne actions */}
         <div className="space-y-4">
+          {/* Raccourcis formulaires DDPI */}
+          {demande.statut && ['EN_TRAITEMENT_DDPI','VISITE_PROGRAMMEE','EN_COMMISSION_BP','ACCORD_PRINCIPE'].includes(demande.statut) && (
+            <div className="card p-5">
+              <p className="font-semibold text-gray-700 text-sm mb-3 flex items-center gap-2">
+                <ExternalLink size={14} className="text-mmi-green" />
+                Formulaires DDPI
+              </p>
+              <div className="space-y-2">
+                {(demande.statut === 'VISITE_PROGRAMMEE' || demande.statut === 'EN_TRAITEMENT_DDPI') && (
+                  <Link to={`/ddpi/visite/${id}`}
+                        className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors">
+                    <ExternalLink size={12} /> PV de visite des lieux
+                  </Link>
+                )}
+                {(demande.statut === 'EN_COMMISSION_BP' || demande.statut === 'VISITE_PROGRAMMEE') && (
+                  <Link to={`/ddpi/comite-bp/${id}`}
+                        className="flex items-center gap-2 text-xs font-medium text-teal-600 bg-teal-50 hover:bg-teal-100 px-3 py-2 rounded-lg transition-colors">
+                    <ExternalLink size={12} /> Réunion Comité BP
+                  </Link>
+                )}
+                {demande.type_demande?.code === 'BP' && (
+                  <Link to={`/ddpi/distance/${id}`}
+                        className="flex items-center gap-2 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-2 rounded-lg transition-colors">
+                    <ExternalLink size={12} /> Vérifier distance 500m
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Panel statut */}
           <div className="card p-5">
             <p className="text-xs text-gray-400 mb-2">Statut actuel</p>
@@ -296,14 +336,22 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
               </p>
 
               <div className="mb-3">
-                <label className="form-label text-xs">Commentaire / annotation</label>
+                <label className="form-label text-xs">
+                  Commentaire / annotation
+                  {['DDPI_INCOMPLET','DDPI_REJET'].some(c =>
+                    actionsDisponibles.some(a => a.etape_code === c)
+                  ) && <span className="text-red-500 ml-1">* obligatoire pour rejet/incomplet</span>}
+                </label>
                 <textarea
                   className="form-input text-sm resize-none"
                   rows={3}
-                  placeholder="Observations, motif, instructions..."
+                  placeholder="Observations, motif, instructions — ce texte sera transmis au demandeur..."
                   value={commentaire}
                   onChange={e => setCommentaire(e.target.value)}
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Ce commentaire sera visible par le demandeur et inclus dans la notification email.
+                </p>
               </div>
 
               <div className="space-y-2">

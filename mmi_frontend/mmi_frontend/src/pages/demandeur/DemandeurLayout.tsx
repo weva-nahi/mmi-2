@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, PlusCircle, FolderOpen, Bell, LogOut, User, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, PlusCircle, FolderOpen, Bell, LogOut, User, Settings } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 
 const MENU = [
@@ -7,6 +7,7 @@ const MENU = [
   { to: '/demandeur/nouvelle',  icon: PlusCircle,       label: 'Nouvelle demande' },
   { to: '/demandeur/demandes',  icon: FolderOpen,        label: 'Mes demandes' },
   { to: '/demandeur/notifications', icon: Bell,          label: 'Notifications' },
+  { to: '/demandeur/profil',        icon: Settings,      label: 'Mon profil' },
 ]
 
 export default function DemandeurLayout() {
