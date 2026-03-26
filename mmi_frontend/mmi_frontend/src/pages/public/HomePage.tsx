@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { BarChart3, ChevronRight, Calendar, ArrowRight, FileText, Scale, Briefcase } from 'lucide-react'
 import { portailAPI, autorisationsAPI } from '@/utils/api'
+import HeroBanner from '@/components/ui/HeroBanner'
 import L from 'leaflet'
 
 const createIcon = (color: string) => L.divIcon({
@@ -33,6 +34,69 @@ interface GeoFeature {
 interface Stats { total: number; par_type: { type: string; count: number }[] }
 
 type FiltreType = 'tous' | 'usines' | 'boulangeries'
+
+// ── Composant overlay anti-scroll ────────────────────────────
+// Affiche un overlay semi-transparent qui capture le scroll.
+// Au clic, l'overlay disparaît et la carte devient interactive.
+// Au blur (clic ailleurs), l'overlay réapparaît.
+function MapScrollGuard() {
+  const [active, setActive] = useState(false)
+
+  if (active) {
+    return (
+      <div
+        style={{
+          position: 'absolute', inset: 0, zIndex: 1000,
+          cursor: 'default', background: 'transparent',
+        }}
+        onClick={() => setActive(false)}
+        onMouseLeave={() => setActive(false)}
+      />
+    )
+  }
+
+  return (
+    <div
+      style={{
+        position: 'absolute', inset: 0, zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(0,0,0,0)',
+        cursor: 'pointer',
+        transition: 'background 0.2s',
+      }}
+      onClick={() => setActive(true)}
+      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.04)' }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0)' }}
+    >
+      <div style={{
+        background: 'rgba(27,107,48,0.85)',
+        color: 'white',
+        padding: '6px 14px',
+        borderRadius: 20,
+        fontSize: 12,
+        fontWeight: 600,
+        pointerEvents: 'none',
+        opacity: 0,
+        transition: 'opacity 0.2s',
+      }}
+        className="map-click-hint"
+      >
+        Cliquer pour interagir
+      </div>
+    </div>
+  )
+}
+
+
+// Composant qui désactive TOUS les comportements de scroll/touch de Leaflet
+function ScrollFix() {
+  const map = useMap()
+  map.scrollWheelZoom.disable()
+  map.touchZoom.disable()
+  map.doubleClickZoom.disable()
+  map.keyboard.disable()
+  return null
+}
 
 export default function HomePage() {
   const { t } = useTranslation()
@@ -74,7 +138,8 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* ── HERO BANNER ───────────────────────────────────── */}
+      {/* ── HERO BANNER ─────────────────────────────────── */}
+           {/* ── HERO BANNER ───────────────────────────────────── */}
       <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
         <img
           src="/images/banner_mmi.jpg"
@@ -184,15 +249,17 @@ export default function HomePage() {
 
           {/* Carte */}
           <div className="lg:col-span-3 space-y-2">
-            <div
-              className="rounded-xl overflow-hidden border border-gray-200 shadow-sm"
-              style={{ height: 450 }}
-            >
+            {/* Wrapper relatif pour l'overlay anti-scroll */}
+            <div style={{ position: 'relative', height: 450, borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
               <MapContainer
                 center={[20.5, -10.5]}
                 zoom={5}
                 style={{ height: '100%', width: '100%' }}
                 scrollWheelZoom={false}
+                touchZoom={false}
+                doubleClickZoom={true}
+                dragging={true}
+                zoomControl={true}
               >
                 <TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -214,9 +281,12 @@ export default function HomePage() {
                   </Marker>
                 ))}
               </MapContainer>
+              {/* Overlay transparent — bloque le scroll molette sur la carte
+                  L'utilisateur clique une fois pour activer le drag, sinon il scrolle normalement */}
+              <MapScrollGuard />
             </div>
             <p className="text-xs text-gray-400 text-center">
-              Utilisez les boutons <strong>+</strong> / <strong>−</strong> de la carte pour zoomer — le scroll de la page reste indépendant
+              Cliquez sur la carte pour l'activer, puis naviguez avec les boutons <strong>+</strong> / <strong>−</strong>
             </p>
           </div>
 
@@ -301,12 +371,17 @@ export default function HomePage() {
 
 // Sous-composant documents
 function DocumentSection({ categorie }: { categorie: 'JURIDIQUE' | 'PROJET' | 'ANNEXE' }) {
-  const [docs, setDocs] = useState<any[]>([])
+  const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    portailAPI.documents({ categorie })
-      .then(r => setDocs(r.data.results || r.data))
+    setLoading(true)
+    setItems([])
+    const fetch = categorie === 'PROJET'
+      ? portailAPI.projets({})
+      : portailAPI.documents({ categorie })
+    fetch
+      .then(r => setItems(r.data.results || r.data))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [categorie])
@@ -317,26 +392,71 @@ function DocumentSection({ categorie }: { categorie: 'JURIDIQUE' | 'PROJET' | 'A
     </div>
   )
 
-  if (!docs.length) return (
-    <p className="text-gray-400 text-sm py-6 text-center">Aucun document disponible.</p>
+  if (!items.length) return (
+    <div className="text-center py-10 text-gray-400">
+      <FileText size={36} className="mx-auto mb-2 opacity-20" />
+      <p className="text-sm">Aucun élément disponible pour le moment.</p>
+    </div>
   )
 
+  // Affichage projets
+  if (categorie === 'PROJET') return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {items.map((p: any) => (
+        <div key={p.id}
+             className="card p-4 hover:shadow-md transition-all border border-gray-100 hover:border-mmi-green">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Briefcase size={17} className="text-green-600" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-800 leading-snug">{p.titre}</p>
+              <p className="text-xs text-green-600 font-medium mt-0.5">{p.secteur}</p>
+              {p.description && (
+                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{p.description}</p>
+              )}
+              <div className="flex items-center gap-2 mt-2">
+                {p.budget_estime && (
+                  <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
+                    {Number(p.budget_estime).toLocaleString('fr-FR')} MRU
+                  </span>
+                )}
+                <span className={`text-xs px-2 py-0.5 rounded-full
+                  ${p.statut === 'ouvert'   ? 'bg-green-100 text-green-700' :
+                    p.statut === 'en_cours' ? 'bg-blue-100 text-blue-700'   :
+                    'bg-gray-100 text-gray-500'}`}>
+                  {p.statut === 'ouvert' ? 'Ouvert' : p.statut === 'en_cours' ? 'En cours' : 'Clôturé'}
+                </span>
+              </div>
+              {p.fichier && (
+                <a href={p.fichier} target="_blank" rel="noreferrer"
+                   className="inline-flex items-center gap-1 text-xs text-mmi-green hover:underline mt-2">
+                  <FileText size={11} /> Télécharger la fiche
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+
+  // Affichage documents (Juridique / Annexe)
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {docs.map(doc => (
-        <a
-          key={doc.id}
-          href={doc.fichier}
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-3 p-4 rounded-lg border border-gray-200 hover:border-mmi-green hover:bg-mmi-green-lt transition-all group"
+      {items.map((doc: any) => (
+        <a key={doc.id}
+           href={doc.fichier}
+           target="_blank"
+           rel="noreferrer"
+           className="flex items-center gap-3 p-4 rounded-xl border border-gray-200 hover:border-mmi-green hover:bg-mmi-green-lt transition-all group"
         >
-          <div className="w-10 h-10 rounded-lg bg-mmi-green-lt group-hover:bg-white flex items-center justify-center flex-shrink-0">
-            <FileText size={18} className="text-mmi-green" />
+          <div className="w-10 h-10 rounded-lg bg-red-50 group-hover:bg-white flex items-center justify-center flex-shrink-0">
+            <FileText size={18} className="text-red-400" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-800 truncate">{doc.titre}</p>
-            <p className="text-xs text-gray-400">{doc.langue?.toUpperCase()}</p>
+            <p className="text-xs text-gray-400 mt-0.5 uppercase">{doc.langue || 'FR'}</p>
           </div>
         </a>
       ))}

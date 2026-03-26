@@ -7,7 +7,16 @@ export default function PMNEPage() {
     <div className="min-h-screen bg-gray-50">
 
       {/* ── Hero banner ── */}
-      <HeroBanner />
+           {/* ── HERO BANNER ───────────────────────────────────── */}
+      <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
+        <img
+          src="/images/banner_mmi.jpg"
+          alt="Ministère des Mines et de l'Industrie"
+          className="w-full h-full object-cover object-center block"
+          style={{ maxHeight: 320 }}
+          onError={e => { e.currentTarget.style.display = 'none' }}
+        />
+      </div>
 
       {/* ── Présentation ── */}
       <section className="bg-white py-14">

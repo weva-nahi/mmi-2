@@ -73,7 +73,7 @@ const NotFound = () => (
   </div>
 )
 
-const AUTH_ROUTES = ['/connexion', '/connexion-agent', '/inscription', '/mot-de-passe-oublie']
+const AUTH_ROUTES = ['/inscription', '/mot-de-passe-oublie']
 
 export default function App() {
   const location = useLocation()

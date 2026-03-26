@@ -43,31 +43,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex flex-col">
 
-      {/* ══ BANNER MMI ══ */}
-      <div className="relative w-full overflow-hidden" style={{ height: 320 }}>
+      {/* ── HERO BANNER ───────────────────────────────────── */}
+      <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
         <img
           src="/images/banner_mmi.jpg"
           alt="Ministère des Mines et de l'Industrie"
-          className="absolute inset-0 w-full h-full object-cover object-center"
-          onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+          className="w-full h-full object-cover object-center block"
+          style={{ maxHeight: 320 }}
+          onError={e => { e.currentTarget.style.display = 'none' }}
         />
-        {/* Contenu du banner */}
-        <div className="relative z-10 flex items-center justify-center h-full px-8">
-          <div className="flex items-center gap-12 text-white max-w-4xl w-full">
-            {/* Logo */}
-            <div className="hidden sm:block flex-shrink-0">
-              <img
-                src="/images/logo_mauritanie.png"
-                alt="République Islamique de Mauritanie"
-                className="h-28 w-28 object-contain rounded-full"
-                style={{ filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.35))' }}
-                onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
-              />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* ══ FORMULAIRE ══ */}
@@ -176,7 +162,6 @@ export default function LoginPage() {
               Créer un compte demandeur
             </Link>
           </div>
-
         </div>
       </div>
     </div>
