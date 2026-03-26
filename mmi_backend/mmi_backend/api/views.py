@@ -9,6 +9,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
+from django.contrib.auth.tokens import default_token_generator
+from django.conf import settings
 import logging
 
 from .models import (
@@ -205,7 +209,7 @@ class ProjetBanqueViewSet(viewsets.ModelViewSet):
 # ─────────────────────────────────────────────────────────────
 
 class TypeDemandeViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset           = TypeDemande.objects.filter(actif=True)
+    queryset           = TypeDemande.objects.filter(actif=True).order_by('id')
     serializer_class   = TypeDemandeSerializer
     permission_classes = [AllowAny]
 
@@ -593,16 +597,12 @@ class PasswordResetRequestView(generics.GenericAPIView):
 
     def post(self, request):
         email = request.data.get('email', '').strip().lower()
-        # Toujours retourner 200 pour ne pas révéler si l'email existe
         try:
             user = User.objects.get(email=email, is_active=True)
-            from django.core.mail import send_mail
-            from django.conf import settings
             import secrets
+            from django.core.mail import send_mail
             token = secrets.token_urlsafe(32)
-            # En production : stocker le token en cache Redis avec expiration 1h
-            # Ici : envoi simple
-            reset_url = f"https://industrie.mmi.gov.mr/reset-password/{token}"
+            reset_url = f"{settings.FRONTEND_URL}/reset-password/{token}"
             send_mail(
                 subject="Réinitialisation de votre mot de passe — MMI",
                 message=f"Cliquez sur ce lien pour réinitialiser votre mot de passe :\n\n{reset_url}\n\nCe lien expire dans 1 heure.",
@@ -1076,3 +1076,43 @@ class AdminUserDetailView(generics.GenericAPIView):
             return Response({'detail': 'Utilisateur suspendu'})
         except User.DoesNotExist:
             return Response({'detail': 'Introuvable'}, status=404)
+
+
+# ─────────────────────────────────────────────────────────────
+# ACTIVATION COMPTE AGENT & CHANGEMENT MOT DE PASSE
+# ─────────────────────────────────────────────────────────────
+
+class ActivationCompteView(generics.GenericAPIView):
+    """GET /api/auth/activer/<uidb64>/<token>/ — active le compte agent."""
+    permission_classes = [AllowAny]
+
+    def get(self, request, uidb64, token):
+        try:
+            uid  = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({'detail': 'Lien invalide.'}, status=400)
+
+        if default_token_generator.check_token(user, token):
+            if user.is_active:
+                return Response({'detail': 'Compte déjà activé.'}, status=200)
+            user.is_active = True
+            user.save()
+            return Response({'detail': 'Compte activé avec succès. Vous pouvez maintenant vous connecter.'})
+        return Response({'detail': 'Lien expiré ou invalide.'}, status=400)
+
+
+class PasswordChangeView(generics.GenericAPIView):
+    """POST /api/auth/password-change/ — change le mot de passe (connecté)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        ancien   = request.data.get('ancien_password', '')
+        nouveau  = request.data.get('nouveau_password', '')
+        if not request.user.check_password(ancien):
+            return Response({'detail': 'Ancien mot de passe incorrect.'}, status=400)
+        if len(nouveau) < 8:
+            return Response({'detail': 'Le nouveau mot de passe doit contenir au moins 8 caractères.'}, status=400)
+        request.user.set_password(nouveau)
+        request.user.save()
+        return Response({'detail': 'Mot de passe modifié avec succès.'})

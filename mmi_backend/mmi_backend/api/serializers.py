@@ -138,16 +138,56 @@ class UserCreateSerializer(serializers.ModelSerializer):
         fields = ['nom', 'prenom', 'email', 'telephone', 'password', 'role_code']
 
     def create(self, validated_data):
-        role_code = validated_data.pop('role_code')
-        password  = validated_data.pop('password')
-        request   = self.context.get('request')
+        role_code        = validated_data.pop('role_code')
+        password_temp    = validated_data.pop('password')
+        request          = self.context.get('request')
+
+        # Compte créé inactif — activation par email
         user = User(**validated_data)
-        user.set_password(password)
+        user.set_password(password_temp)
+        user.is_active = False          # inactif jusqu'à activation
         if request:
             user.created_by = request.user
         user.save()
+
         role, _ = Role.objects.get_or_create(code=role_code, defaults={'nom': role_code})
         UserRole.objects.create(user=user, role=role, assigned_by=request.user if request else None)
+
+        # Envoyer email d'activation
+        from django.utils.http import urlsafe_base64_encode
+        from django.utils.encoding import force_bytes
+        from django.contrib.auth.tokens import default_token_generator
+        from django.core.mail import send_mail
+        from django.conf import settings
+
+        uid   = urlsafe_base64_encode(force_bytes(user.pk))
+        token = default_token_generator.make_token(user)
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        lien  = f"{frontend_url}/activer-compte/{uid}/{token}/"
+
+        sujet = "Activation de votre compte — Plateforme MMI"
+        message = f"""Bonjour {user.nom} {user.prenom},
+
+Votre compte agent a été créé sur la plateforme du Ministère des Mines et de l'Industrie.
+
+Vos informations de connexion :
+  Email       : {user.email}
+  Mot de passe temporaire : {password_temp}
+
+Pour activer votre compte, cliquez sur le lien ci-dessous :
+{lien}
+
+Ce lien est valable 72 heures. Après activation, vous pourrez modifier votre mot de passe.
+
+Cordialement,
+L'équipe MMI — Mauritanie
+"""
+        try:
+            send_mail(sujet, message, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+        except Exception as e:
+            import logging
+            logging.getLogger('api').warning(f"Email activation non envoyé à {user.email}: {e}")
+
         return user
 
 

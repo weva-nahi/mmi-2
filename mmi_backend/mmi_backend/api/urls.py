@@ -52,11 +52,12 @@ router.register(r'details/extension',        ExtensionDetailViewSet,          ba
 router.register(r'details/usine-eau',        UsineEauDetailViewSet,           basename='detail-usine-eau')
 router.register(r'details/unite',            UniteIndustrielleDetailViewSet,  basename='detail-unite')
 
-from api.views import DGIAnalyticsView, ExportView, AdminActualiteView, AdminActualiteDetailView, AdminDocumentView, AdminStatsView, AdminUserDetailView
+from api.views import DGIAnalyticsView, ExportView, AdminActualiteView, AdminActualiteDetailView, AdminDocumentView, AdminStatsView, AdminUserDetailView, ActivationCompteView
 
 urlpatterns = [
     # Authentification
     path('auth/login/agent/', LoginAgentView.as_view(), name='auth-login-agent'),
+    path('auth/activer/<str:uidb64>/<str:token>/', ActivationCompteView.as_view(), name='activer-compte'),
     path('auth/password-change/', PasswordChangeView.as_view(), name='password-change'),
     path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password-reset'),
     path('auth/login/',           LoginView.as_view(),        name='auth-login'),

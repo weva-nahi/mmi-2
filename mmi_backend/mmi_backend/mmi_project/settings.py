@@ -202,3 +202,6 @@ LOGGING = {
         'api': {'handlers': ['console'], 'level': 'DEBUG', 'propagate': False},
     },
 }
+
+# Frontend URL pour les liens d'activation
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
