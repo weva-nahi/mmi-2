@@ -1,4 +1,3 @@
-
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
@@ -322,6 +321,12 @@ class EtapeTraitement(models.Model):
 
 
 class PieceRequise(models.Model):
+    FORMATS = [
+        ('.pdf',            'PDF uniquement'),
+        ('.pdf,.jpg,.png',  'PDF, JPG, PNG'),
+        ('.pdf,.doc,.docx', 'PDF, DOC, DOCX'),
+        ('*',               'Tous formats'),
+    ]
     type_demande       = models.ForeignKey(TypeDemande, on_delete=models.CASCADE,
                                             related_name='pieces_requises')
     nom                = models.CharField(max_length=200)
@@ -332,6 +337,7 @@ class PieceRequise(models.Model):
     has_statut         = models.BooleanField(default=False)
     has_cahier_charges = models.BooleanField(default=False)
     ordre              = models.IntegerField(default=0)
+    format_accepte     = models.CharField(max_length=50, default='.pdf,.jpg,.png', choices=FORMATS)
 
     class Meta:
         db_table = 'piece_requise'

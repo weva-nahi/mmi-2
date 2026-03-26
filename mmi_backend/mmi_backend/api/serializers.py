@@ -201,8 +201,8 @@ class TypeDemandeSerializer(serializers.ModelSerializer):
 class PieceRequiseSerializer(serializers.ModelSerializer):
     class Meta:
         model  = PieceRequise
-        fields = ['id', 'nom', 'nom_en', 'nom_ar', 'description',
-                  'obligatoire', 'has_statut', 'has_cahier_charges', 'ordre']
+        fields = ['id', 'type_demande', 'nom', 'nom_en', 'nom_ar', 'description',
+                  'obligatoire', 'has_statut', 'has_cahier_charges', 'ordre', 'format_accepte']
 
 
 class PieceJointeSerializer(serializers.ModelSerializer):

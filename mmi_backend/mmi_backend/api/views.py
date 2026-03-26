@@ -112,6 +112,21 @@ class UserViewSet(viewsets.ModelViewSet):
     def activer(self, request, pk=None):
         """Activer ou suspendre un compte."""
         user = self.get_object()
+
+        # Bloquer la désactivation de son propre compte
+        if user.pk == request.user.pk:
+            return Response(
+                {'detail': 'Vous ne pouvez pas désactiver votre propre compte.'},
+                status=400
+            )
+
+        # Bloquer la désactivation d'un super admin
+        if user.is_super_admin and not user.is_active == False:
+            return Response(
+                {'detail': 'Le compte Super Admin ne peut pas être suspendu.'},
+                status=400
+            )
+
         user.is_active = not user.is_active
         user.save()
         action_label = "activé" if user.is_active else "suspendu"
@@ -193,6 +208,25 @@ class TypeDemandeViewSet(viewsets.ReadOnlyModelViewSet):
     queryset           = TypeDemande.objects.filter(actif=True)
     serializer_class   = TypeDemandeSerializer
     permission_classes = [AllowAny]
+
+
+class PieceRequiseViewSet(viewsets.ModelViewSet):
+    """CRUD pièces requises — lecture publique, écriture Super Admin."""
+    serializer_class = PieceRequiseSerializer
+    filter_backends  = [DjangoFilterBackend]
+    filterset_fields = ['type_demande', 'obligatoire']
+
+    def get_queryset(self):
+        qs = PieceRequise.objects.all().order_by('type_demande', 'ordre')
+        type_demande = self.request.query_params.get('type_demande')
+        if type_demande:
+            qs = qs.filter(type_demande_id=type_demande)
+        return qs
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsSuperAdmin()]
 
 
 class DemandeViewSet(viewsets.ModelViewSet):
@@ -863,3 +897,182 @@ class ExportView(generics.GenericAPIView):
                 return Response({'detail': 'openpyxl non installé. Utilisez format=csv'}, status=501)
 
         return Response({'detail': 'Format invalide. Utilisez format=csv ou format=excel'}, status=400)
+
+
+# ─────────────────────────────────────────────────────────────
+# SUPER ADMIN — Gestion complète
+# ─────────────────────────────────────────────────────────────
+
+class AdminActualiteView(generics.GenericAPIView):
+    """CRUD Actualités — /api/admin/actualites/"""
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        from api.models import Actualite
+        from api.serializers import ActualiteSerializer
+        qs = Actualite.objects.all().order_by('-date_publication')
+        search = request.query_params.get('search')
+        if search:
+            qs = qs.filter(titre__icontains=search)
+        return Response({'results': ActualiteSerializer(qs, many=True).data, 'count': qs.count()})
+
+    def post(self, request):
+        from api.models import Actualite
+        data = request.data
+        art = Actualite.objects.create(
+            titre=data.get('titre', ''),
+            contenu=data.get('contenu', ''),
+            publie=data.get('publie', False),
+            auteur=request.user,
+        )
+        return Response({'id': art.id, 'titre': art.titre, 'slug': art.slug}, status=201)
+
+
+class AdminActualiteDetailView(generics.GenericAPIView):
+    """PATCH/DELETE /api/admin/actualites/<id>/"""
+    permission_classes = [IsSuperAdmin]
+
+    def patch(self, request, pk):
+        from api.models import Actualite
+        try:
+            art = Actualite.objects.get(pk=pk)
+        except Actualite.DoesNotExist:
+            return Response({'detail': 'Introuvable'}, status=404)
+        for field in ['titre', 'contenu', 'publie']:
+            if field in request.data:
+                setattr(art, field, request.data[field])
+        art.save()
+        return Response({'detail': 'Modifié'})
+
+    def delete(self, request, pk):
+        from api.models import Actualite
+        try:
+            Actualite.objects.get(pk=pk).delete()
+            return Response({'detail': 'Supprimé'})
+        except Actualite.DoesNotExist:
+            return Response({'detail': 'Introuvable'}, status=404)
+
+
+class AdminDocumentView(generics.GenericAPIView):
+    """CRUD Documents publics — /api/admin/documents/"""
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        from api.models import DocumentPublic
+        qs = DocumentPublic.objects.all()
+        cat = request.query_params.get('categorie')
+        if cat:
+            qs = qs.filter(categorie=cat)
+        data = [{'id': d.id, 'titre': d.titre, 'categorie': d.categorie,
+                 'publie': d.publie, 'fichier': d.fichier.url if d.fichier else None,
+                 'created_at': d.created_at.strftime('%d/%m/%Y')} for d in qs]
+        return Response({'results': data, 'count': len(data)})
+
+    def post(self, request):
+        from api.models import DocumentPublic
+        doc = DocumentPublic.objects.create(
+            titre=request.data.get('titre', ''),
+            categorie=request.data.get('categorie', 'ANNEXE'),
+            fichier=request.FILES.get('fichier'),
+            publie=request.data.get('publie', False),
+            created_by=request.user,
+        )
+        return Response({'id': doc.id, 'titre': doc.titre}, status=201)
+
+    def delete(self, request, pk=None):
+        from api.models import DocumentPublic
+        try:
+            DocumentPublic.objects.get(pk=pk).delete()
+            return Response({'detail': 'Supprimé'})
+        except DocumentPublic.DoesNotExist:
+            return Response({'detail': 'Introuvable'}, status=404)
+
+
+class AdminStatsView(generics.GenericAPIView):
+    """GET /api/admin/stats/ — statistiques globales superadmin"""
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        from django.db.models import Count, Q
+        from django.utils import timezone
+        from datetime import timedelta
+
+        today = timezone.now()
+        debut_semaine = today - timedelta(days=7)
+        debut_mois    = today - timedelta(days=30)
+
+        users_qs   = User.objects.all()
+        demandes_qs = Demande.objects.all()
+
+        return Response({
+            # Utilisateurs
+            'total_users':       users_qs.count(),
+            'demandeurs':        users_qs.filter(user_roles__role__code='DEMANDEUR', user_roles__actif=True).count(),
+            'agents':            users_qs.filter(is_staff=False, is_super_admin=False).exclude(user_roles__role__code='DEMANDEUR').count(),
+            'users_actifs':      users_qs.filter(is_active=True).count(),
+            'users_suspendus':   users_qs.filter(is_active=False).count(),
+            'nouveaux_7j':       users_qs.filter(created_at__gte=debut_semaine).count(),
+            # Demandes
+            'total_demandes':    demandes_qs.count(),
+            'demandes_semaine':  demandes_qs.filter(date_soumission__gte=debut_semaine).count(),
+            'demandes_mois':     demandes_qs.filter(date_soumission__gte=debut_mois).count(),
+            'en_cours':          demandes_qs.exclude(statut__in=['VALIDE', 'REJETE']).count(),
+            'valides':           demandes_qs.filter(statut='VALIDE').count(),
+            'rejetes':           demandes_qs.filter(statut='REJETE').count(),
+            # Par type
+            'par_type': list(demandes_qs.values('type_demande__code').annotate(count=Count('id'))),
+            # Par statut
+            'par_statut': list(demandes_qs.values('statut').annotate(count=Count('id')).order_by('-count')),
+            # Autorisations
+            'autorisations_actives': Autorisation.objects.filter(statut='active').count(),
+            # Roles
+            'par_role': list(
+                UserRole.objects.filter(actif=True)
+                .values('role__code', 'role__nom')
+                .annotate(count=Count('id'))
+                .order_by('-count')
+            ),
+        })
+
+
+class AdminUserDetailView(generics.GenericAPIView):
+    """PATCH /api/admin/users/<id>/ — modifier un utilisateur"""
+    permission_classes = [IsSuperAdmin]
+
+    def patch(self, request, pk):
+        try:
+            user = User.objects.get(pk=pk)
+        except User.DoesNotExist:
+            return Response({'detail': 'Introuvable'}, status=404)
+
+        for field in ['nom', 'prenom', 'email', 'telephone', 'is_active']:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+
+        if 'password' in request.data and request.data['password']:
+            user.set_password(request.data['password'])
+
+        user.save()
+
+        # Changer le rôle si demandé
+        if 'role_code' in request.data:
+            from api.models import Role, UserRole
+            try:
+                role = Role.objects.get(code=request.data['role_code'])
+                UserRole.objects.filter(user=user).update(actif=False)
+                UserRole.objects.get_or_create(user=user, role=role, defaults={'actif': True, 'assigned_by': request.user})
+            except Role.DoesNotExist:
+                pass
+
+        return Response({'detail': 'Utilisateur modifié avec succès'})
+
+    def delete(self, request, pk):
+        try:
+            user = User.objects.get(pk=pk)
+            if user.is_super_admin:
+                return Response({'detail': 'Impossible de supprimer un super admin'}, status=403)
+            user.is_active = False
+            user.save()
+            return Response({'detail': 'Utilisateur suspendu'})
+        except User.DoesNotExist:
+            return Response({'detail': 'Introuvable'}, status=404)

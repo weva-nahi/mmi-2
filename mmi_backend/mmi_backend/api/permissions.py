@@ -56,7 +56,7 @@ class IsMMISignataire(BasePermission):
 
 
 class IsAgentInstitutionnel(BasePermission):
-    """Tout acteur sauf le demandeur."""
+    """Tout acteur sauf le demandeur (inclut le super admin)."""
     ROLES_AGENTS = [
         'SUPER_ADMIN', 'SEC_CENTRAL', 'SEC_GENERAL', 'MINISTRE',
         'DGI_DIRECTEUR', 'DGI_SECRETARIAT', 'DDPI_CHEF', 'DDPI_AGENT', 'MMI_SIGNATAIRE'
@@ -65,6 +65,9 @@ class IsAgentInstitutionnel(BasePermission):
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
+        # Super admin a accès à tout
+        if request.user.is_super_admin:
+            return True
         return any(request.user.has_role(r) for r in self.ROLES_AGENTS)
 
 
