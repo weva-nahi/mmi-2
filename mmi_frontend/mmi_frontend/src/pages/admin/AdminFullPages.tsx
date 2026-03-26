@@ -4,7 +4,7 @@ import {
   BarChart3, Users, Newspaper, FolderOpen, Settings, LogOut,
   Shield, Plus, Search, CheckCircle, XCircle, RefreshCw,
   Edit2, Trash2, Eye, EyeOff, FileText, Bell, Database,
-  UserCheck, UserX, Building2, User, Key, ChevronDown, ChevronUp
+  UserCheck, UserX, Building2, User, Key, ChevronDown, ChevronUp, Image
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { adminAPI, portailAPI } from '@/utils/api'
@@ -493,6 +493,8 @@ export function AdminActualites() {
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId]     = useState<number|null>(null)
   const [form, setForm] = useState({ titre:'', contenu:'', publie:false })
+  const [imageFile, setImageFile] = useState<File|null>(null)
+  const [imagePreview, setImagePreview] = useState<string>('')
 
   const load = () => {
     portailAPI.actualites({})
@@ -504,11 +506,30 @@ export function AdminActualites() {
 
   const handleSubmit = async () => {
     try {
-      if (editId) { await adminAPI.updateActualite(editId, form); toast.success('Article mis à jour') }
-      else        { await adminAPI.createActualite(form as any);  toast.success('Article publié') }
+      const fd = new FormData()
+      fd.append('titre',   form.titre)
+      fd.append('contenu', form.contenu)
+      fd.append('publie',  String(form.publie))
+      if (imageFile) fd.append('image', imageFile)
+      if (editId) {
+        await adminAPI.updateActualiteForm(editId, fd)
+        toast.success('Article mis à jour')
+      } else {
+        await adminAPI.createActualiteForm(fd)
+        toast.success('Article publié')
+      }
       setShowForm(false); setEditId(null)
-      setForm({titre:'',contenu:'',publie:false}); load()
+      setForm({titre:'',contenu:'',publie:false})
+      setImageFile(null); setImagePreview(''); load()
     } catch(err:any) { toast.error(err.response?.data?.detail||'Erreur') }
+  }
+
+  const startEdit = (a: any) => {
+    setEditId(a.id)
+    setForm({titre:a.titre, contenu:a.contenu, publie:a.publie})
+    setImagePreview(a.image || '')
+    setImageFile(null)
+    setShowForm(true)
   }
 
   const handleDelete = async (id:number) => {
@@ -537,6 +558,41 @@ export function AdminActualites() {
             <div><label className="form-label">Contenu *</label>
               <textarea className="form-input resize-none" rows={6} value={form.contenu}
                         onChange={e=>setForm(p=>({...p,contenu:e.target.value}))}/></div>
+            {/* Image */}
+            <div>
+              <label className="form-label">Image de l'article (optionnel)</label>
+              <label className={`flex items-center gap-3 p-3 rounded-xl border-2 border-dashed cursor-pointer transition-all
+                ${imageFile || imagePreview ? 'border-mmi-green bg-mmi-green-lt' : 'border-gray-200 hover:border-mmi-green'}`}>
+                <input type="file" className="hidden" accept="image/*"
+                       onChange={e => {
+                         const f = e.target.files?.[0] || null
+                         setImageFile(f)
+                         if (f) setImagePreview(URL.createObjectURL(f))
+                       }} />
+                {imagePreview ? (
+                  <img src={imagePreview} alt="preview"
+                       className="h-16 w-24 object-cover rounded-lg flex-shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Image size={20} className="text-gray-400" />
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-medium text-gray-700">
+                    {imageFile ? imageFile.name : imagePreview ? 'Image actuelle (cliquer pour changer)' : 'Cliquer pour choisir une image'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">JPG, PNG, WebP — recommandé 1200×630px</p>
+                </div>
+              </label>
+              {imagePreview && (
+                <button type="button"
+                        onClick={() => { setImageFile(null); setImagePreview('') }}
+                        className="text-xs text-red-400 hover:text-red-600 mt-1">
+                  ✕ Retirer l'image
+                </button>
+              )}
+            </div>
+
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <input type="checkbox" checked={form.publie}
                      onChange={e=>setForm(p=>({...p,publie:e.target.checked}))}/>
@@ -546,7 +602,7 @@ export function AdminActualites() {
               <button onClick={handleSubmit} className="btn-primary text-sm">
                 {editId?'Mettre à jour':'Publier'}
               </button>
-              <button onClick={()=>{setShowForm(false);setEditId(null)}}
+              <button onClick={()=>{setShowForm(false);setEditId(null); setImageFile(null); setImagePreview('')}}
                       className="btn-secondary text-sm">Annuler</button>
             </div>
           </div>
@@ -586,7 +642,7 @@ export function AdminActualites() {
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center justify-center gap-2">
-                      <button onClick={()=>{ setEditId(a.id); setForm({titre:a.titre,contenu:a.contenu,publie:a.publie}); setShowForm(true) }}
+                      <button onClick={()=>startEdit(a)}
                               className="p-1.5 bg-blue-50 text-blue-500 rounded-lg hover:bg-blue-100"><Edit2 size={14}/></button>
                       <button onClick={()=>handleDelete(a.id)}
                               className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={14}/></button>

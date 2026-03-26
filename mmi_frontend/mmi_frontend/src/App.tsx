@@ -15,7 +15,9 @@ import ArticleDetailPage  from '@/pages/public/ArticleDetailPage'
 import LoginPage      from '@/pages/auth/LoginPage'
 import RegisterPage   from '@/pages/auth/RegisterPage'
 import LoginAgentPage from '@/pages/auth/LoginAgentPage'
-import MotDePasseOubliePage from '@/pages/auth/MotDePasseOubliePage'
+import MotDePasseOubliePage  from '@/pages/auth/MotDePasseOubliePage'
+import ActivationPage        from '@/pages/auth/ActivationPage'
+import ChangePasswordPage    from '@/pages/auth/ChangePasswordPage'
 
 // Demandeur
 import DemandeurLayout        from '@/pages/demandeur/DemandeurLayout'
@@ -44,13 +46,13 @@ import { MinistreLayout, MinistreDashboard, MinistreDossiers, MinistreDossier } 
 import { DGILayout, DGIDashboard, DGIDossiers, DGISignature, DGIDossier, DGIAnalyticsPage } from '@/pages/agents/DGIPages'
 
 // DDPI
-import { DDPILayout, DDPIDashboard, DDPIDossiers, DDPIVisites, DDPIComites, DDPIDossier } from '@/pages/agents/Ddpipages'
+import { DDPILayout, DDPIDashboard, DDPIDossiers, DDPIVisites, DDPIComites, DDPIDossier } from '@/pages/agents/DDPIPages'
 import FormulaireVisite   from '@/pages/agents/FormulaireVisite'
 import FormulaireComiteBP from '@/pages/agents/FormulaireComiteBP'
 import Distance500m       from '@/pages/agents/Distance500m'
 
 // MMI
-import { MMILayout, MMIDashboard, MMIDossiers, MMISignes, MMIDossier } from '@/pages/agents/Mmipages'
+import { MMILayout, MMIDashboard, MMIDossiers, MMISignes, MMIDossier } from '@/pages/agents/MMIPages'
 
 // Admin
 import AdminLayout, { AdminDashboard, AdminUsers, AdminActualites, AdminConfig } from '@/pages/admin/AdminFullPages'
@@ -94,6 +96,8 @@ export default function App() {
           <Route path="/actualites"      element={<ActualitesPage />} />
           <Route path="/actualites/:slug" element={<ArticleDetailPage />} />
           <Route path="/mot-de-passe-oublie" element={<MotDePasseOubliePage />} />
+          <Route path="/activer-compte/:uidb64/:token" element={<ActivationPage />} />
+          <Route path="/changer-mot-de-passe" element={<ChangePasswordPage />} />
 
           {/* ── Demandeur ── */}
           <Route path="/demandeur" element={<RouteGuard roles={['DEMANDEUR']}><DemandeurLayout /></RouteGuard>}>
@@ -134,6 +138,7 @@ export default function App() {
             <Route path="dossiers"     element={<SecretariatDossiers />} />
             <Route path="transmis"     element={<SecretariatTransmis />} />
             <Route path="dossier/:id"  element={<SecretariatDossier />} />
+            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
           {/* ── Secrétaire Général ── */}
@@ -142,6 +147,7 @@ export default function App() {
             <Route path="dossiers"    element={<SGDossiers />} />
             <Route path="traites"     element={<SGTraites />} />
             <Route path="dossier/:id" element={<SGDossier />} />
+            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
           {/* ── Ministre ── */}
@@ -149,6 +155,7 @@ export default function App() {
             <Route index              element={<MinistreDashboard />} />
             <Route path="dossiers"    element={<MinistreDossiers />} />
             <Route path="dossier/:id" element={<MinistreDossier />} />
+            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
           {/* ── DGI ── */}
@@ -158,6 +165,7 @@ export default function App() {
             <Route path="signature"   element={<DGISignature />} />
             <Route path="dossier/:id"  element={<DGIDossier />} />
             <Route path="analytics"     element={<DGIAnalyticsPage />} />
+            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
           {/* ── DDPI ── */}
@@ -170,6 +178,7 @@ export default function App() {
             <Route path="visite/:id"    element={<FormulaireVisite />} />
             <Route path="comite-bp/:id" element={<FormulaireComiteBP />} />
             <Route path="distance/:id"  element={<Distance500m />} />
+            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
           {/* ── MMI Signataire ── */}
@@ -178,6 +187,7 @@ export default function App() {
             <Route path="dossiers"    element={<MMIDossiers />} />
             <Route path="signes"      element={<MMISignes />} />
             <Route path="dossier/:id" element={<MMIDossier />} />
+            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
           {/* ── Super Admin ── */}
@@ -188,6 +198,7 @@ export default function App() {
             <Route path="documents"   element={<AdminDocumentsPage />} />
             <Route path="config"          element={<AdminConfig />} />
             <Route path="pieces-requises" element={<PiecesRequisesPage />} />
+            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

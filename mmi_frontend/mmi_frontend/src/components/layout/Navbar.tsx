@@ -133,10 +133,10 @@ export default function Navbar() {
 
             <div className="h-4 w-px bg-white/30" />
 
-            {/* ── Icône Auth ── */}
+            {/* ── Icône Auth — toujours visible ── */}
             {isAgent ? (
-              /* Agent/Admin connecté */
-              <div className="relative">
+              /* Agent/Admin connecté : menu déroulant */
+              <div className="relative flex-shrink-0">
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   className="flex items-center gap-1 text-white hover:text-yellow-200 transition-colors"
@@ -162,9 +162,17 @@ export default function Navbar() {
                       <LayoutDashboard size={14} />
                       Mon espace
                     </Link>
+                    <Link
+                      to={`${getEspaceLink()}/changer-mot-de-passe`.replace('//','/')}
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-mmi-green-lt hover:text-mmi-green border-t border-gray-50"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                      Changer mot de passe
+                    </Link>
                     <button
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-2 text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
+                      className="w-full flex items-center gap-2 text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 border-t border-gray-50"
                     >
                       <LogIn size={14} className="rotate-180" />
                       Déconnexion
@@ -173,8 +181,8 @@ export default function Navbar() {
                 )}
               </div>
 
-            ) : !isAuthenticated ? (
-              /* Non connecté → icône user vers /connexion-agent */
+            ) : (
+              /* Non connecté OU demandeur connecté → icône toujours visible → /connexion-agent */
               <Link
                 to="/connexion-agent"
                 title="Espace agents / administrateurs"
@@ -185,8 +193,7 @@ export default function Navbar() {
                   <circle cx="12" cy="7" r="4"/>
                 </svg>
               </Link>
-
-            ) : null /* Demandeur connecté → icône masquée */ }
+            )}
 
           </div>
 

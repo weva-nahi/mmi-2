@@ -139,7 +139,15 @@ export const adminAPI = {
                        api.post('/admin/actualites/', data, {
                          headers: { 'Content-Type': 'multipart/form-data' },
                        }),
-  updateActualite:   (id: number, data: object) => api.patch(`/admin/actualites/${id}/`, data),
+  updateActualite:     (id: number, data: object) => api.patch(`/admin/actualites/${id}/`, data),
+  updateActualiteForm: (id: number, data: FormData) =>
+                         api.patch(`/admin/actualites/${id}/`, data, {
+                           headers: { 'Content-Type': 'multipart/form-data' },
+                         }),
+  createActualiteForm: (data: FormData) =>
+                         api.post('/admin/actualites/', data, {
+                           headers: { 'Content-Type': 'multipart/form-data' },
+                         }),
   deleteActualite:   (id: number)      => api.delete(`/admin/actualites/${id}/`),
   // Documents
   documents:        (params?: object) => api.get('/admin/documents/', { params }),
