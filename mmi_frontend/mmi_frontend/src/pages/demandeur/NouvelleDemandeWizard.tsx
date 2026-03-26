@@ -107,12 +107,12 @@ export default function NouvelleDemandeWizard() {
     'Inchiri','Nouakchott Nord','Nouakchott Ouest','Nouakchott Sud',
   ]
 
-  const TYPES_LABELS: Record<string, { color: string; desc: string }> = {
-    BP:             { color: '#f97316', desc: 'Boulangerie, pâtisserie, confiserie' },
-    USINE_EAU:      { color: '#0ea5e9', desc: 'Production d\'eau minérale embouteillée' },
-    UNITE:          { color: '#1B6B30', desc: 'Usine, manufacture, unité de production' },
-    RENOUVELLEMENT: { color: '#7c3aed', desc: 'Renouvellement d\'enregistrement industriel' },
-    EXTENSION:      { color: '#c2410c', desc: 'Agrandissement d\'une unité existante' },
+  const TYPES_LABELS: Record<string, { color: string; desc: string; emoji?: string }> = {
+    BP:             { color: '#f97316', desc: 'Boulangerie, pâtisserie, confiserie', emoji: '🥖' },
+    USINE_EAU:      { color: '#0ea5e9', desc: 'Production d\'eau minérale embouteillée', emoji: '💧' },
+    UNITE:          { color: '#1B6B30', desc: 'Usine, manufacture, unité de production', emoji: '🏭' },
+    RENOUVELLEMENT: { color: '#7c3aed', desc: 'Renouvellement d\'enregistrement industriel', emoji: '🔁' },
+    EXTENSION:      { color: '#c2410c', desc: 'Agrandissement d\'une unité existante', emoji: '📐' },
   }
 
   return (

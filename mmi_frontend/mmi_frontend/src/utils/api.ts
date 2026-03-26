@@ -93,16 +93,11 @@ export const piecesRequisesAPI = {
 
 // ── Autorisations (carte publique) ────────────────────────────
 export const autorisationsAPI = {
-
-  geojson: () => api.get('/autorisations/geojson/'),
-  stats:   () => api.get('/autorisations/stats/'),
-
   list:       (params?: object) => api.get('/autorisations/', { params }),
   get:        (id: number)      => api.get(`/autorisations/${id}/`),
   geojson:    ()                => api.get('/autorisations/geojson/'),
   stats:      ()                => api.get('/autorisations/stats/'),
   rechercher: (q: string)       => api.get('/autorisations/', { params: { search: q } }),
-
 }
 
 // ── Portail public ────────────────────────────────────────────
@@ -123,8 +118,10 @@ export const notificationsAPI = {
 
 // ── Analytics ─────────────────────────────────────────────────
 export const analyticsAPI = {
-  dashboard: () => api.get('/analytics/dashboard/'),
-  export:    (params?: object) => api.get('/analytics/export/', { params, responseType: 'blob' }),
+  dashboard:    () => api.get('/analytics/dashboard/'),
+  dgi:          () => api.get('/analytics/dgi/'),
+  exportCSV:    (params?: object) => api.get('/export/renouvellements/', { params: { ...params, format: 'csv'   }, responseType: 'blob' }),
+  exportExcel:  (params?: object) => api.get('/export/renouvellements/', { params: { ...params, format: 'excel' }, responseType: 'blob' }),
 }
 
 // ── Admin ─────────────────────────────────────────────────────

@@ -7,11 +7,13 @@ import AgentLayout from './AgentLayout'
 import DossiersList from './DossiersList'
 import DossierDetail from './DossierDetail'
 import DashboardAnalytics from './DashboardAnalytics'
+import DGIAnalytics from './DGIAnalytics'
 
 const DGI_MENU = [
-  { to: '/dgi',           icon: BarChart3,     label: 'Tableau de bord' },
-  { to: '/dgi/dossiers',  icon: Inbox,         label: 'En instruction' },
-  { to: '/dgi/signature', icon: FileSignature, label: 'À signer' },
+  { to: '/dgi',            icon: BarChart3,     label: 'Tableau de bord' },
+  { to: '/dgi/dossiers',   icon: Inbox,         label: 'En instruction' },
+  { to: '/dgi/signature',  icon: FileSignature, label: 'À signer' },
+  { to: '/dgi/analytics',  icon: BarChart3,     label: 'Analytics & Export' },
 ]
 
 export function DGILayout() {
@@ -75,4 +77,8 @@ export function DGIDossier() {
       ]}
     />
   )
+}
+
+export function DGIAnalyticsPage() {
+  return <DGIAnalytics />
 }

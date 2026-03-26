@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom'
 import Navbar from '@/components/layout/Navbar'
+import { useLocation } from 'react-router-dom'
 import Footer from '@/components/layout/Footer'
 import RouteGuard from '@/components/ui/RouteGuard'
 
@@ -26,6 +27,9 @@ import NotificationsPage      from '@/pages/demandeur/Notifications'
 import ProfilPage                  from '@/pages/demandeur/ProfilPage'
 import FormulaireRenouvellement    from '@/pages/demandeur/FormulaireRenouvellement'
 import FormulaireExtension         from '@/pages/demandeur/FormulaireExtension'
+import FormulaireBP              from '@/pages/demandeur/FormulaireBP'
+import FormulaireUsineEau        from '@/pages/demandeur/FormulaireUsineEau'
+import FormulaireUnite           from '@/pages/demandeur/FormulaireUnite'
 
 // Secrétariat Central
 import { SecretariatLayout, SecretariatDashboard, SecretariatDossiers, SecretariatTransmis, SecretariatDossier } from '@/pages/agents/SecretariatPages'
@@ -37,7 +41,7 @@ import { SGLayout, SGDashboard, SGDossiers, SGTraites, SGDossier } from '@/pages
 import { MinistreLayout, MinistreDashboard, MinistreDossiers, MinistreDossier } from '@/pages/agents/MinistреPages'
 
 // DGI
-import { DGILayout, DGIDashboard, DGIDossiers, DGISignature, DGIDossier } from '@/pages/agents/DGIPages'
+import { DGILayout, DGIDashboard, DGIDossiers, DGISignature, DGIDossier, DGIAnalyticsPage } from '@/pages/agents/DGIPages'
 
 // DDPI
 import { DDPILayout, DDPIDashboard, DDPIDossiers, DDPIVisites, DDPIComites, DDPIDossier } from '@/pages/agents/Ddpipages'
@@ -69,10 +73,15 @@ const NotFound = () => (
   </div>
 )
 
+const AUTH_ROUTES = ['/connexion', '/connexion-agent', '/inscription', '/mot-de-passe-oublie']
+
 export default function App() {
+  const location = useLocation()
+  const hideNavbar = AUTH_ROUTES.includes(location.pathname)
+
   return (
     <div className="flex flex-col min-h-screen">
-      <Navbar />
+      {!hideNavbar && <Navbar />}
       <div className="flex-1">
         <Routes>
           {/* ── Public ── */}
@@ -94,8 +103,29 @@ export default function App() {
             <Route path="demandes/:id" element={<SuiviDemande />} />
             <Route path="notifications" element={<NotificationsPage />} />
             <Route path="profil"               element={<ProfilPage />} />
-            <Route path="renouvellement"       element={<FormulaireRenouvellement />} />
-            <Route path="extension"            element={<FormulaireExtension />} />
+
+          </Route>
+
+          {/* ── Formulaires demandeur — routes indépendantes avec sidebar ── */}
+          <Route path="/demandeur/renouvellement"
+                 element={<RouteGuard roles={['DEMANDEUR']}><DemandeurLayout /></RouteGuard>}>
+            <Route index element={<FormulaireRenouvellement />} />
+          </Route>
+          <Route path="/demandeur/extension"
+                 element={<RouteGuard roles={['DEMANDEUR']}><DemandeurLayout /></RouteGuard>}>
+            <Route index element={<FormulaireExtension />} />
+          </Route>
+          <Route path="/demandeur/formulaire-bp"
+                 element={<RouteGuard roles={['DEMANDEUR']}><DemandeurLayout /></RouteGuard>}>
+            <Route index element={<FormulaireBP />} />
+          </Route>
+          <Route path="/demandeur/formulaire-usine-eau"
+                 element={<RouteGuard roles={['DEMANDEUR']}><DemandeurLayout /></RouteGuard>}>
+            <Route index element={<FormulaireUsineEau />} />
+          </Route>
+          <Route path="/demandeur/formulaire-unite"
+                 element={<RouteGuard roles={['DEMANDEUR']}><DemandeurLayout /></RouteGuard>}>
+            <Route index element={<FormulaireUnite />} />
           </Route>
 
           {/* ── Secrétariat Central ── */}
@@ -126,7 +156,8 @@ export default function App() {
             <Route index              element={<DGIDashboard />} />
             <Route path="dossiers"    element={<DGIDossiers />} />
             <Route path="signature"   element={<DGISignature />} />
-            <Route path="dossier/:id" element={<DGIDossier />} />
+            <Route path="dossier/:id"  element={<DGIDossier />} />
+            <Route path="analytics"     element={<DGIAnalyticsPage />} />
           </Route>
 
           {/* ── DDPI ── */}
@@ -162,7 +193,7 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
-      <Footer />
+      {!hideNavbar && <Footer />}
     </div>
   )
 }

@@ -41,7 +41,7 @@ export default function FormulaireExtension() {
     if (!searchTerm.trim()) return
     setSearching(true)
     try {
-      const res = await autorisationsAPI.recherche(searchTerm)
+      const res = await autorisationsAPI.rechercher(searchTerm)
       const autos = res.data.results || res.data
       if (autos.length > 0) {
         setAutoExistante(autos[0])
