@@ -256,8 +256,10 @@ class DemandeViewSet(viewsets.ModelViewSet):
             'DDPI_VISITE':           'VISITE_PROGRAMMEE',
             'DDPI_COMMISSION_BP':    'EN_COMMISSION_BP',
             'DDPI_ACCORD_PRINCIPE':  'ACCORD_PRINCIPE',
+        'ARRETE_EN_COURS':       'ARRETE_EN_COURS',
             'DDPI_REJET':            'REJETE',
             'DDPI_CHEF_SERVICE':     'EN_TRAITEMENT_DDPI',
+        'DDPI_ARRETE_REDACTION':  'ARRETE_EN_COURS',
             'DGI_SIGNATURE':         'SIGNATURE_DGI',
             'MMI_SIGNATURE':         'SIGNATURE_MMI',
             'SYSTEME_VALIDATION':    'VALIDE',
@@ -482,3 +484,382 @@ class AnalyticsView(generics.GenericAPIView):
             'demandes_recentes': recentes,
             'autorisations_actives': Autorisation.objects.filter(statut='active').count(),
         })
+
+
+class LoginAgentView(generics.GenericAPIView):
+    """
+    POST /api/auth/login/agent/
+    Connexion des agents et administrateurs via email + password.
+    Les demandeurs utilisent /api/auth/login/ avec identifiant_unique.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email    = request.data.get('email', '').strip().lower()
+        password = request.data.get('password', '')
+
+        if not email or not password:
+            return Response({'detail': 'Email et mot de passe obligatoires.'}, status=400)
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({'detail': 'Email ou mot de passe incorrect.'}, status=401)
+
+        if not user.check_password(password):
+            return Response({'detail': 'Email ou mot de passe incorrect.'}, status=401)
+
+        if not user.is_active:
+            return Response({'detail': 'Compte désactivé. Contactez l\'administrateur.'}, status=403)
+
+        # Bloquer les demandeurs — ils ont leur propre page de connexion
+        roles = user.get_roles()
+        if roles == ['DEMANDEUR']:
+            return Response(
+                {'detail': 'Les demandeurs utilisent l\'espace demandeur avec leur identifiant MMI-DEM-XXXXX.'},
+                status=403
+            )
+
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(user)
+
+        # Mettre à jour last_login
+        from django.utils import timezone
+        user.last_login_at = timezone.now()
+        user.save(update_fields=['last_login_at'])
+
+        from .serializers import UserDetailSerializer
+        return Response({
+            'access':  str(refresh.access_token),
+            'refresh': str(refresh),
+            'user':    UserDetailSerializer(user).data,
+        })
+
+
+class PasswordChangeView(generics.GenericAPIView):
+    """POST /api/auth/password-change/ — changer son propre mot de passe."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = request.user
+        old  = request.data.get('old_password', '')
+        new  = request.data.get('new_password', '')
+        if not user.check_password(old):
+            return Response({'detail': 'Mot de passe actuel incorrect.'}, status=400)
+        if len(new) < 8:
+            return Response({'detail': 'Le mot de passe doit contenir au moins 8 caractères.'}, status=400)
+        user.set_password(new)
+        user.save()
+        return Response({'detail': 'Mot de passe modifié avec succès.'})
+
+
+class PasswordResetRequestView(generics.GenericAPIView):
+    """POST /api/auth/password-reset/ — demande de réinitialisation par email."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        # Toujours retourner 200 pour ne pas révéler si l'email existe
+        try:
+            user = User.objects.get(email=email, is_active=True)
+            from django.core.mail import send_mail
+            from django.conf import settings
+            import secrets
+            token = secrets.token_urlsafe(32)
+            # En production : stocker le token en cache Redis avec expiration 1h
+            # Ici : envoi simple
+            reset_url = f"https://industrie.mmi.gov.mr/reset-password/{token}"
+            send_mail(
+                subject="Réinitialisation de votre mot de passe — MMI",
+                message=f"Cliquez sur ce lien pour réinitialiser votre mot de passe :\n\n{reset_url}\n\nCe lien expire dans 1 heure.",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=True,
+            )
+        except User.DoesNotExist:
+            pass
+        return Response({'detail': 'Si cet email existe, un lien de réinitialisation a été envoyé.'})
+
+
+# ─────────────────────────────────────────────────────────────
+# ANALYTICS AVANCÉ — DGI + Export
+# ─────────────────────────────────────────────────────────────
+
+class DGIAnalyticsView(generics.GenericAPIView):
+    """GET /api/analytics/dgi/ — tableau de bord complet DGI avec données renouvellement."""
+    permission_classes = [IsAgentInstitutionnel]
+
+    def get(self, request):
+        from django.db.models import Count, Q, Avg
+        from django.utils import timezone
+        from datetime import timedelta
+
+        today = timezone.now().date()
+        debut_annee = today.replace(month=1, day=1)
+
+        qs = Demande.objects.all()
+
+        # KPIs généraux
+        kpis = {
+            'total_demandes':        qs.count(),
+            'en_cours':              qs.exclude(statut__in=['VALIDE','REJETE']).count(),
+            'valides_annee':         qs.filter(statut='VALIDE', date_soumission__date__gte=debut_annee).count(),
+            'rejetes':               qs.filter(statut='REJETE').count(),
+            'autorisations_actives': Autorisation.objects.filter(statut='active').count(),
+            'en_instruction_dgi':    qs.filter(statut='EN_INSTRUCTION_DGI').count(),
+            'en_attente_signature':  qs.filter(statut='SIGNATURE_DGI').count(),
+        }
+
+        # Par type de demande
+        par_type = list(
+            qs.values('type_demande__code', 'type_demande__libelle')
+              .annotate(total=Count('id'),
+                        valides=Count('id', filter=Q(statut='VALIDE')),
+                        en_cours=Count('id', filter=~Q(statut__in=['VALIDE','REJETE'])))
+              .order_by('-total')
+        )
+
+        # Par wilaya
+        par_wilaya = list(
+            qs.exclude(wilaya='').values('wilaya')
+              .annotate(total=Count('id'))
+              .order_by('-total')[:15]
+        )
+
+        # Par mois (12 derniers mois)
+        par_mois = []
+        for i in range(11, -1, -1):
+            d = today - timedelta(days=30*i)
+            count = qs.filter(
+                date_soumission__year=d.year,
+                date_soumission__month=d.month
+            ).count()
+            par_mois.append({
+                'mois': d.strftime('%b %Y'),
+                'annee': d.year,
+                'mois_num': d.month,
+                'count': count,
+            })
+
+        # Par statut
+        par_statut = list(qs.values('statut').annotate(count=Count('id')).order_by('-count'))
+
+        # Dernières demandes
+        recentes = DemandeListSerializer(
+            qs.order_by('-date_soumission')[:10], many=True
+        ).data
+
+        # ── Données renouvellement ────────────────────────────
+        from api.models import RenouvellementDetail
+        renouvellements = RenouvellementDetail.objects.select_related('demande__demandeur','demande__type_demande')
+
+        renouv_data = []
+        for r in renouvellements[:50]:
+            renouv_data.append({
+                'id':                    r.id,
+                'numero_ref':            r.demande.numero_ref,
+                'raison_sociale':        r.demande.raison_sociale,
+                'statut_demande':        r.demande.statut,
+                'wilaya':                r.demande.wilaya,
+                'activite':              r.demande.activite,
+                'date_soumission':       r.demande.date_soumission.strftime('%d/%m/%Y'),
+                # Section I
+                'abreviation':           r.abreviation,
+                'nationalite_entreprise':r.nationalite_entreprise,
+                # Section III
+                'nom_responsable':       r.nom_responsable,
+                'nni_passeport':         r.nni_passeport,
+                'telephone_responsable': r.telephone_responsable,
+                # Section IV
+                'forme_juridique':       r.forme_juridique,
+                'registre_commerce':     r.registre_commerce,
+                'nif_numero':            r.nif_numero,
+                'cnss_numero':           r.cnss_numero,
+                # Section V
+                'numero_enregistrement': r.numero_enregistrement,
+                'date_creation':         str(r.date_creation) if r.date_creation else '',
+                'date_debut_production': str(r.date_debut_production) if r.date_debut_production else '',
+                'emplois_crees':         r.emplois_crees,
+                'employes_administratifs':r.employes_administratifs,
+                'techniciens':           r.techniciens,
+                'ouvriers':              r.ouvriers,
+                # Section VI
+                'description_unite':     r.description_unite,
+                'capital_social':        str(r.capital_social) if r.capital_social else '',
+                'capacite_tonnes_an':    r.capacite_tonnes_an,
+                'capacite_tonnes_jour':  r.capacite_tonnes_jour,
+                'varietes_production':   r.varietes_production,
+                'difficultes':           r.difficultes,
+            })
+
+        # Stats renouvellement
+        renouv_stats = {
+            'total':       renouvellements.count(),
+            'par_forme':   list(renouvellements.values('forme_juridique').annotate(count=Count('id'))),
+            'total_emplois': sum(r.emplois_crees for r in renouvellements),
+        }
+
+        return Response({
+            'kpis':            kpis,
+            'par_type':        par_type,
+            'par_wilaya':      par_wilaya,
+            'par_mois':        par_mois,
+            'par_statut':      par_statut,
+            'demandes_recentes': recentes,
+            'renouvellements': renouv_data,
+            'renouv_stats':    renouv_stats,
+        })
+
+
+class ExportView(generics.GenericAPIView):
+    """
+    GET /api/export/renouvellements/?format=csv|excel
+    Export CSV ou Excel des données de renouvellement pour le DGI.
+    """
+    permission_classes = [IsAgentInstitutionnel]
+
+    def get(self, request):
+        import csv
+        import io
+        from django.http import HttpResponse
+        from api.models import RenouvellementDetail
+
+        fmt = request.query_params.get('format', 'csv')
+        qs  = RenouvellementDetail.objects.select_related(
+            'demande', 'demande__demandeur', 'demande__type_demande'
+        ).order_by('-demande__date_soumission')
+
+        # Filtres optionnels
+        wilaya = request.query_params.get('wilaya')
+        statut = request.query_params.get('statut')
+        annee  = request.query_params.get('annee')
+        if wilaya: qs = qs.filter(demande__wilaya=wilaya)
+        if statut: qs = qs.filter(demande__statut=statut)
+        if annee:  qs = qs.filter(demande__date_soumission__year=annee)
+
+        HEADERS = [
+            'N° Référence','Raison Sociale','Activité','Wilaya','Statut','Date Soumission',
+            'Abréviation','Nationalité Entreprise',
+            'Nom Responsable','NNI/Passeport','Tél Responsable',
+            'Forme Juridique','N° RC','NIF','CNSS',
+            'N° Enregistrement','Date Création','Date Début Production','Date Démarrage',
+            'Emplois Créés','Employés Admin','Techniciens','Ouvriers','Total Employés',
+            'Nationalités Employés',
+            'Description Unité','Capital Social (MRU)','Fonds Propres','Emprunt',
+            'Nature Investissement','Type Données',
+            'Capacité (T/jour)','Capacité (T/mois)','Capacité (T/an)',
+            'Production Effective','Stock',
+            'Variétés Production','Capacité Estimée','Capacité Augmentation',
+            'Difficultés',
+        ]
+
+        def row(r):
+            total_emp = (r.employes_administratifs or 0) + (r.techniciens or 0) + (r.ouvriers or 0)
+            return [
+                r.demande.numero_ref,
+                r.demande.raison_sociale,
+                r.demande.activite,
+                r.demande.wilaya,
+                r.demande.get_statut_display(),
+                r.demande.date_soumission.strftime('%d/%m/%Y'),
+                r.abreviation,
+                r.nationalite_entreprise,
+                r.nom_responsable,
+                r.nni_passeport,
+                r.telephone_responsable,
+                r.get_forme_juridique_display() if r.forme_juridique else '',
+                r.registre_commerce,
+                r.nif_numero,
+                r.cnss_numero,
+                r.numero_enregistrement,
+                str(r.date_creation) if r.date_creation else '',
+                str(r.date_debut_production) if r.date_debut_production else '',
+                str(r.date_demarrage) if r.date_demarrage else '',
+                r.emplois_crees,
+                r.employes_administratifs,
+                r.techniciens,
+                r.ouvriers,
+                total_emp,
+                r.nationalites_employes,
+                r.description_unite,
+                str(r.capital_social or ''),
+                str(r.fonds_propres or ''),
+                str(r.emprunt or ''),
+                r.nature_investissement,
+                r.type_donnees,
+                r.capacite_tonnes_jour,
+                r.capacite_tonnes_mois,
+                r.capacite_tonnes_an,
+                r.production_effective,
+                r.stock,
+                r.varietes_production,
+                r.capacite_augmentation,
+                ' | '.join(r.difficultes) if isinstance(r.difficultes, list) else str(r.difficultes),
+            ]
+
+        if fmt == 'csv':
+            response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+            response['Content-Disposition'] = 'attachment; filename="renouvellements_mmi.csv"'
+            writer = csv.writer(response)
+            writer.writerow(HEADERS)
+            for r in qs:
+                writer.writerow(row(r))
+            return response
+
+        elif fmt == 'excel':
+            try:
+                import openpyxl
+                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+                from openpyxl.utils import get_column_letter
+
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "Renouvellements MMI"
+
+                # En-tête entreprise
+                ws.merge_cells('A1:AK1')
+                ws['A1'] = "MINISTÈRE DES MINES ET DE L'INDUSTRIE — Export Renouvellements Industriels"
+                ws['A1'].font = Font(bold=True, size=13, color='FFFFFF')
+                ws['A1'].fill = PatternFill('solid', fgColor='1B6B30')
+                ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+                ws.row_dimensions[1].height = 30
+
+                # En-têtes colonnes
+                header_fill = PatternFill('solid', fgColor='2E8B45')
+                header_font = Font(bold=True, color='FFFFFF', size=10)
+                for col_idx, h in enumerate(HEADERS, 1):
+                    cell = ws.cell(row=2, column=col_idx, value=h)
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = Alignment(horizontal='center', wrap_text=True)
+                    ws.column_dimensions[get_column_letter(col_idx)].width = max(12, len(h) + 2)
+                ws.row_dimensions[2].height = 40
+
+                # Données
+                alt_fill = PatternFill('solid', fgColor='F0FFF4')
+                for row_idx, r in enumerate(qs, 3):
+                    for col_idx, val in enumerate(row(r), 1):
+                        cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                        cell.alignment = Alignment(wrap_text=True, vertical='top')
+                        if row_idx % 2 == 0:
+                            cell.fill = alt_fill
+
+                # Figer la première ligne
+                ws.freeze_panes = 'A3'
+
+                # Filtre automatique
+                ws.auto_filter.ref = f"A2:{get_column_letter(len(HEADERS))}2"
+
+                buf = io.BytesIO()
+                wb.save(buf)
+                buf.seek(0)
+                response = HttpResponse(
+                    buf.read(),
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                response['Content-Disposition'] = 'attachment; filename="renouvellements_mmi.xlsx"'
+                return response
+            except ImportError:
+                return Response({'detail': 'openpyxl non installé. Utilisez format=csv'}, status=501)
+
+        return Response({'detail': 'Format invalide. Utilisez format=csv ou format=excel'}, status=400)

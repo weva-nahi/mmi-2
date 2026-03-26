@@ -69,7 +69,7 @@ WSGI_APPLICATION = 'mmi_project.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME':   BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -115,13 +115,33 @@ CORS_ALLOWED_ORIGINS = os.getenv(
 CORS_ALLOW_CREDENTIALS = True
 
 # ── Email ─────────────────────────────────────────────────────
-EMAIL_BACKEND    = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST       = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT       = int(os.getenv('EMAIL_PORT', 587))
-EMAIL_USE_TLS    = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_HOST_USER  = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = f"MMI Plateforme <{EMAIL_HOST_USER}>"
+# ── Configuration Email ──────────────────────────────────────
+# Fournisseur : 'gmail' ou 'outlook' (défini dans .env)
+EMAIL_PROVIDER = os.getenv('EMAIL_PROVIDER', 'gmail').lower()
+
+if EMAIL_PROVIDER == 'outlook':
+    EMAIL_BACKEND      = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST         = 'smtp.office365.com'
+    EMAIL_PORT         = 587
+    EMAIL_USE_TLS      = True
+    EMAIL_USE_SSL      = False
+    EMAIL_HOST_USER    = os.getenv('EMAIL_HOST_USER', '')
+    EMAIL_HOST_PASSWORD= os.getenv('EMAIL_HOST_PASSWORD', '')
+else:
+    # Gmail (défaut)
+    EMAIL_BACKEND      = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST         = 'smtp.gmail.com'
+    EMAIL_PORT         = 587
+    EMAIL_USE_TLS      = True
+    EMAIL_USE_SSL      = False
+    EMAIL_HOST_USER    = os.getenv('EMAIL_HOST_USER', '')
+    EMAIL_HOST_PASSWORD= os.getenv('EMAIL_HOST_PASSWORD', '')
+
+DEFAULT_FROM_EMAIL = os.getenv(
+    'DEFAULT_FROM_EMAIL',
+    f"MMI Plateforme <{os.getenv('EMAIL_HOST_USER', 'noreply@mmi.gov.mr')}>"
+)
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 # ── Fichiers statiques et media ───────────────────────────────
 STATIC_URL  = '/static/'

@@ -7,6 +7,9 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
+    LoginAgentView,
+    PasswordChangeView,
+    PasswordResetRequestView,
     LoginView, InscriptionView,
     UserViewSet, RoleViewSet,
     ActualiteViewSet, DocumentPublicViewSet, ProjetBanqueViewSet,
@@ -47,14 +50,21 @@ router.register(r'details/extension',        ExtensionDetailViewSet,          ba
 router.register(r'details/usine-eau',        UsineEauDetailViewSet,           basename='detail-usine-eau')
 router.register(r'details/unite',            UniteIndustrielleDetailViewSet,  basename='detail-unite')
 
+from api.views import DGIAnalyticsView, ExportView
+
 urlpatterns = [
     # Authentification
+    path('auth/login/agent/', LoginAgentView.as_view(), name='auth-login-agent'),
+    path('auth/password-change/', PasswordChangeView.as_view(), name='password-change'),
+    path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password-reset'),
     path('auth/login/',           LoginView.as_view(),        name='auth-login'),
     path('auth/register/',        InscriptionView.as_view(),  name='auth-register'),
     path('auth/token/refresh/',   TokenRefreshView.as_view(), name='token-refresh'),
 
     # Analytics
-    path('analytics/dashboard/', AnalyticsView.as_view(), name='analytics-dashboard'),
+    path('analytics/dashboard/', AnalyticsView.as_view(),    name='analytics-dashboard'),
+    path('analytics/dgi/',       DGIAnalyticsView.as_view(), name='analytics-dgi'),
+    path('export/renouvellements/', ExportView.as_view(),    name='export-renouvellements'),
 
     # Tous les ViewSets
     path('', include(router.urls)),
