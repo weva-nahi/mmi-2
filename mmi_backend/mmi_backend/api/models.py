@@ -5,9 +5,25 @@ from django.utils.text import slugify
 import random, string
 
 
-def generate_identifiant():
-    chiffres = ''.join(random.choices(string.digits, k=5))
-    return f"MMI-DEM-{chiffres}"
+def generate_identifiant(nom_entreprise=''):
+    """
+    Génère un identifiant lisible basé sur le nom de l'entreprise.
+    Format : MMI-{PREFIXE}-{ANNEE}{RAND4}
+    Ex: MMI-ALAM-20250001 pour 'Boulangerie Al Amal'
+    """
+    import re
+    from datetime import date
+    year = date.today().year
+
+    if nom_entreprise:
+        # Nettoyer et prendre les 4 premiers caractères significatifs
+        clean = re.sub(r'[^a-zA-Z]', '', nom_entreprise.upper())
+        prefixe = clean[:4].ljust(4, 'X')  # 4 lettres min
+    else:
+        prefixe = ''.join(random.choices(string.ascii_uppercase, k=4))
+
+    suffix = ''.join(random.choices(string.digits, k=4))
+    return f"MMI-{prefixe}-{year}{suffix}"
 
 def generate_numero_ref():
     from datetime import date
@@ -79,9 +95,9 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def save(self, *args, **kwargs):
         if not self.identifiant_unique:
-            uid = generate_identifiant()
+            uid = generate_identifiant(getattr(self, 'nom_entreprise', '') or '')
             while User.objects.filter(identifiant_unique=uid).exists():
-                uid = generate_identifiant()
+                uid = generate_identifiant(getattr(self, 'nom_entreprise', '') or '')
             self.identifiant_unique = uid
         super().save(*args, **kwargs)
 
@@ -98,11 +114,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 class Role(models.Model):
     CODES = [
-        ('SUPER_ADMIN','Super Administrateur'),('DEMANDEUR','Demandeur'),
-        ('SEC_CENTRAL','Agent Secrétariat Central'),('SEC_GENERAL','Secrétaire Général'),
-        ('MINISTRE','Ministre MMI'),('DGI_DIRECTEUR','Directeur DGI'),
-        ('DGI_SECRETARIAT','Secrétariat DGI'),('DDPI_CHEF','Chef Service DDPI'),
-        ('DDPI_AGENT','Agent DDPI'),('MMI_SIGNATAIRE','Signataire MMI'),
+        ('SUPER_ADMIN',      'Super Administrateur'),
+        ('DEMANDEUR',        'Demandeur'),
+        ('SEC_CENTRAL',      'Agent Secrétariat Central'),
+        ('SEC_GENERAL',      'Secrétaire Général'),
+        ('MINISTRE',         'Ministre MMI — Signataire'),
+        ('DGI_DIRECTEUR',    'Directeur Général de l\'Industrie'),
+        ('DGI_SECRETARIAT',  'Secrétariat DGI'),
+        ('DDPI_DIRECTEUR',   'Directeur DDPI'),
+        ('DDPI_CHEF_BP',     'Chef Service Boulangeries / Pâtisseries'),
+        ('DDPI_CHEF_USINES', 'Chef Service Usines Industrielles'),
+        ('DDPI_AGENT',       'Agent DDPI'),
+        ('SEC_COMITE_BP',    'Secrétaire du Comité BP'),
+        ('MMI_SIGNATAIRE',   'Signataire MMI (fusionné Ministre)'),
     ]
     code        = models.CharField(max_length=50, unique=True, choices=CODES)
     nom         = models.CharField(max_length=100)
@@ -245,14 +269,28 @@ class TypeDemande(models.Model):
 
 class Demande(models.Model):
     STATUTS = [
-        ('SOUMISE','Soumise'),('EN_RECEPTION','En réception SC'),
-        ('TRANSMISE_SG','Transmise SG'),('EN_LECTURE_SG','En lecture SG'),
-        ('TRANSMISE_MINISTRE','Transmise Ministre'),('EN_LECTURE_MINISTRE','En lecture Ministre'),
-        ('EN_INSTRUCTION_DGI','En instruction DGI'),('EN_TRAITEMENT_DDPI','En traitement DDPI'),
-        ('DOSSIER_INCOMPLET','Dossier incomplet'),('VISITE_PROGRAMMEE','Visite programmée'),
-        ('EN_COMMISSION_BP','En commission BP'),('ACCORD_PRINCIPE','Accord de principe'),
-        ('ARRETE_EN_COURS','Arrêté en rédaction'),('SIGNATURE_DGI','Signature DGI'),
-        ('SIGNATURE_MMI','Signature MMI'),('VALIDE','Validée'),('REJETE','Rejetée'),
+        ('SOUMISE',              'Soumise'),
+        ('EN_RECEPTION',         'En réception SC'),
+        ('PRET_IMPRESSION_DGI',  'Prêt à imprimer — DGI'),
+        ('TRANSMISE_SG',         'Transmise SG'),
+        ('EN_LECTURE_SG',        'En lecture SG'),
+        ('TRANSMISE_MINISTRE',   'Transmise Ministre'),
+        ('EN_LECTURE_MINISTRE',  'En lecture Ministre'),
+        ('EN_INSTRUCTION_DGI',   'En instruction DGI'),
+        ('EN_TRAITEMENT_DDPI',   'En traitement DDPI'),
+        ('EN_TRAITEMENT_DDPI_BP','En traitement DDPI — Chef BP'),
+        ('EN_TRAITEMENT_DDPI_US','En traitement DDPI — Chef Usines'),
+        ('DOSSIER_INCOMPLET',    'Dossier incomplet'),
+        ('VISITE_PROGRAMMEE',    'Visite programmée'),
+        ('EN_COMMISSION_BP',     'En commission BP'),
+        ('PV_COMITE_DEPOSE',     'PV comité BP déposé'),
+        ('ATTENTE_QUITTANCE',    'En attente quittance paiement'),
+        ('ACCORD_PRINCIPE',      'Accord de principe'),
+        ('ARRETE_EN_COURS',      'Arrêté en rédaction'),
+        ('SIGNATURE_DGI',        'Signature DGI'),
+        ('SIGNATURE_MMI',        'Signature MMI / Ministre'),
+        ('VALIDE',               'Validée'),
+        ('REJETE',               'Rejetée'),
     ]
 
     numero_ref          = models.CharField(max_length=30, unique=True, blank=True, default='')
@@ -291,16 +329,39 @@ class Demande(models.Model):
 
 class EtapeTraitement(models.Model):
     CODES_ETAPES = [
-        ('SC_RECEPTION','Accusé réception'),('SC_TRANSMISSION_SG','Transmission SG'),
-        ('SG_LECTURE','Lecture SG'),('SG_TRANSMISSION_MIN','Transmission Ministre'),
-        ('SG_TRANSMISSION_DGI','Transmission directe DGI'),('MIN_LECTURE','Lecture Ministre'),
-        ('MIN_TRANSMISSION_DGI','Transmission DGI par Ministre'),('DGI_INSTRUCTION','Instruction DGI'),
-        ('DGI_TRANSMISSION_DDPI','Transmission DDPI'),('DGI_SIGNATURE','Signature DGI'),
-        ('DDPI_VERIFICATION','Vérification complétude'),('DDPI_INCOMPLET','Dossier incomplet'),
-        ('DDPI_VISITE','Visite programmée'),('DDPI_PV_VISITE','PV de visite'),
-        ('DDPI_COMMISSION_BP','Commission BP'),('DDPI_ACCORD_PRINCIPE','Accord de principe'),
-        ('DDPI_REJET','Rejet'),('DDPI_CHEF_SERVICE','Transmission Chef service'),
-        ('MMI_SIGNATURE','Signature MMI'),('SYSTEME_VALIDATION','Validation système'),
+        # Secrétariat Central
+        ('SC_RECEPTION',           'Accusé de réception numérique'),
+        ('SC_TRANSMISSION_SG',     'Transmission au Secrétaire Général'),
+        # Secrétariat DGI — impression
+        ('DGI_SEC_IMPRESSION',     'Dossier disponible pour impression'),
+        # Secrétaire Général
+        ('SG_LECTURE',             'Prise en charge SG'),
+        ('SG_TRANSMISSION_MIN',    'Transmission au Ministre'),
+        ('SG_TRANSMISSION_DGI',    'Transmission directe DGI'),
+        # Ministre
+        ('MIN_LECTURE',            'Prise en charge Ministre'),
+        ('MIN_TRANSMISSION_DGI',   'Transmission DGI par Ministre'),
+        # DGI
+        ('DGI_INSTRUCTION',        'Instruction technique DGI'),
+        ('DGI_TRANSMISSION_DDPI',  'Transmission à la DDPI'),
+        ('DGI_SIGNATURE',          'Signature DGI'),
+        # DDPI — orientation
+        ('DDPI_VERIFICATION',      'Vérification de complétude'),
+        ('DDPI_INCOMPLET',         'Dossier incomplet — retour demandeur'),
+        ('DDPI_CHEF_BP',           'Orientation Chef Service BP'),
+        ('DDPI_CHEF_USINES',       'Orientation Chef Service Usines'),
+        # DDPI — traitement
+        ('DDPI_VISITE',            'Visite des lieux programmée'),
+        ('DDPI_PV_VISITE',         'PV de visite déposé'),
+        ('DDPI_COMMISSION_BP',     'Dossier soumis en commission BP'),
+        ('DDPI_PV_COMITE_BP',      'PV du comité BP déposé'),
+        ('DDPI_QUITTANCE_BP',      'Quittance de paiement reçue'),
+        ('DDPI_ACCORD_PRINCIPE',   'Accord de principe accordé'),
+        ('DDPI_ARRETE_REDACTION',  'Redaction arrete en cours'),
+        ('DDPI_REJET',             'Demande rejetée'),
+        # MMI / Ministre — signature finale
+        ('MMI_SIGNATURE',          'Signature officielle — Autorisation délivrée'),
+        ('SYSTEME_VALIDATION',     'Validation système — document disponible'),
     ]
 
     demande      = models.ForeignKey(Demande, on_delete=models.CASCADE, related_name='etapes')
@@ -310,6 +371,7 @@ class EtapeTraitement(models.Model):
     statut_apres = models.CharField(max_length=50)
     action       = models.CharField(max_length=200)
     commentaire  = models.TextField(blank=True, default='')
+    piece_jointe = models.FileField(upload_to='etapes_pieces/%Y/%m/', null=True, blank=True)
     date_action  = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -629,6 +691,25 @@ class UniteIndustrielleDetail(models.Model):
     def __str__(self):
         return f"Unité industrielle — {self.demande.numero_ref}"
 
+
+
+class QuittancePaiement(models.Model):
+    """Quittance de paiement déposée après approbation du comité BP."""
+    demande        = models.OneToOneField(Demande, on_delete=models.CASCADE,
+                                          related_name='quittance')
+    fichier        = models.FileField(upload_to='quittances/%Y/%m/')
+    montant        = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    reference      = models.CharField(max_length=100, blank=True, default='')
+    depose_par     = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,
+                                        related_name='quittances_deposees')
+    date_depot     = models.DateTimeField(default=timezone.now)
+    valide         = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'quittance_paiement'
+
+    def __str__(self):
+        return f"Quittance {self.demande.numero_ref} — {self.reference}"
 
 # ══════════════════════════════════════════════════════════════
 # CONFIGURATION PLATEFORME (nom ministre, paramètres admin)

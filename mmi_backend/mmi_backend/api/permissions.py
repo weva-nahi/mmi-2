@@ -42,12 +42,7 @@ class IsDGIDirecteur(BasePermission):
         return request.user.is_authenticated and request.user.has_role('DGI_DIRECTEUR')
 
 
-class IsDDPI(BasePermission):
-    def has_permission(self, request, view):
-        return request.user.is_authenticated and (
-            request.user.has_role('DDPI_CHEF') or
-            request.user.has_role('DDPI_AGENT')
-        )
+
 
 
 class IsMMISignataire(BasePermission):
@@ -59,7 +54,9 @@ class IsAgentInstitutionnel(BasePermission):
     """Tout acteur sauf le demandeur (inclut le super admin)."""
     ROLES_AGENTS = [
         'SUPER_ADMIN', 'SEC_CENTRAL', 'SEC_GENERAL', 'MINISTRE',
-        'DGI_DIRECTEUR', 'DGI_SECRETARIAT', 'DDPI_CHEF', 'DDPI_AGENT', 'MMI_SIGNATAIRE'
+        'DGI_DIRECTEUR', 'DGI_SECRETARIAT',
+        'DDPI_DIRECTEUR', 'DDPI_CHEF_BP', 'DDPI_CHEF_USINES', 'DDPI_AGENT',
+        'SEC_COMITE_BP', 'MMI_SIGNATAIRE'
     ]
 
     def has_permission(self, request, view):
@@ -83,3 +80,45 @@ class IsOwnerOrAgent(BasePermission):
             return obj.demandeur_id == request.user.id
         # Les agents voient tous les dossiers
         return True
+
+
+class IsDDPIDirecteur(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.has_role('DDPI_DIRECTEUR')
+
+
+class IsDDPIChefBP(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.has_role('DDPI_CHEF_BP')
+
+
+class IsDDPIChefUsines(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.has_role('DDPI_CHEF_USINES')
+
+
+class IsSecretaireComiteBP(BasePermission):
+    """Secretaire du Comite BP."""
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.has_role('SEC_COMITE_BP')
+
+
+class IsDDPI(BasePermission):
+    """Tout agent DDPI : directeur, chefs de service, agents."""
+    ROLES_DDPI = ['DDPI_DIRECTEUR', 'DDPI_CHEF_BP', 'DDPI_CHEF_USINES', 'DDPI_AGENT']
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_super_admin:
+            return True
+        return any(request.user.has_role(r) for r in self.ROLES_DDPI)
+
+
+class IsDGISecretariat(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and (
+            request.user.has_role('DGI_SECRETARIAT') or
+            request.user.has_role('DGI_DIRECTEUR') or
+            request.user.is_super_admin
+        )

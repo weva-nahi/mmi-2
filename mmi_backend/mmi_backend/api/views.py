@@ -9,6 +9,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
+from django.utils.encoding import force_str, force_bytes
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.contrib.auth.tokens import default_token_generator
+from django.conf import settings
 import logging
 
 from .models import (
@@ -37,6 +41,8 @@ from .permissions import (
     IsSuperAdmin, IsDemandeur, IsSecretariatCentral, IsSecretaireGeneral,
     IsMinistre, IsDGI, IsDGIDirecteur, IsDDPI, IsMMISignataire,
     IsAgentInstitutionnel, IsOwnerOrAgent,
+    IsDDPIDirecteur, IsDDPIChefBP, IsDDPIChefUsines,
+    IsSecretaireComiteBP, IsDGISecretariat,
 )
 
 logger = logging.getLogger('api')
@@ -145,8 +151,9 @@ class RoleViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ActualiteViewSet(viewsets.ModelViewSet):
     serializer_class = ActualiteSerializer
-    filter_backends  = [filters.SearchFilter]
-    search_fields    = ['titre', 'contenu']
+    filter_backends  = [filters.SearchFilter, DjangoFilterBackend]
+    search_fields    = ['titre', 'contenu', 'slug']
+    filterset_fields = ['publie']
 
     def get_queryset(self):
         if self.request.user.is_authenticated and self.request.user.is_super_admin:
@@ -154,12 +161,23 @@ class ActualiteViewSet(viewsets.ModelViewSet):
         return Actualite.objects.filter(publie=True)
 
     def get_permissions(self):
-        if self.action in ['list', 'retrieve']:
+        if self.action in ['list', 'retrieve', 'by_slug']:
             return [AllowAny()]
         return [IsSuperAdmin()]
 
     def perform_create(self, serializer):
         serializer.save(auteur=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='by-slug/(?P<slug>[^/.]+)',
+            permission_classes=[AllowAny])
+    def by_slug(self, request, slug=None):
+        """GET /api/public/actualites/by-slug/{slug}/ — récupère un article par slug."""
+        try:
+            qs = self.get_queryset()
+            article = qs.get(slug=slug)
+            return Response(ActualiteSerializer(article).data)
+        except Actualite.DoesNotExist:
+            return Response({'detail': 'Article introuvable.'}, status=404)
 
 
 class DocumentPublicViewSet(viewsets.ModelViewSet):
@@ -210,6 +228,49 @@ class TypeDemandeViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
 
 
+class ImprimerDossierView(generics.GenericAPIView):
+    """
+    GET /api/demandes/{id}/imprimer/
+    Retourne toutes les données du dossier pour impression papier (DGI Secrétariat).
+    Déclenche aussi la transition DGI_SEC_IMPRESSION.
+    """
+    permission_classes = [IsAgentInstitutionnel]
+
+    def get(self, request, pk=None):
+        from api.models import Demande, EtapeTraitement
+        try:
+            demande = Demande.objects.get(pk=pk)
+        except Demande.DoesNotExist:
+            return Response({'detail': 'Dossier introuvable.'}, status=404)
+
+        # Enregistrer l'étape d'impression si pas déjà fait
+        deja_imprime = EtapeTraitement.objects.filter(
+            demande=demande, etape_code='DGI_SEC_IMPRESSION'
+        ).exists()
+
+        if not deja_imprime:
+            statut_avant = demande.statut
+            demande.statut = 'PRET_IMPRESSION_DGI'
+            demande.save()
+            EtapeTraitement.objects.create(
+                demande=demande,
+                acteur=request.user,
+                etape_code='DGI_SEC_IMPRESSION',
+                statut_avant=statut_avant,
+                statut_apres='PRET_IMPRESSION_DGI',
+                action='Dossier mis à disposition pour impression — circuit papier',
+            )
+
+        # Construire les données complètes pour impression
+        from api.serializers import DemandeDetailSerializer
+        data = DemandeDetailSerializer(demande, context={'request': request}).data
+        return Response({
+            'dossier':     data,
+            'imprimable':  True,
+            'message':     'Dossier prêt pour impression.',
+        })
+
+
 class PieceRequiseViewSet(viewsets.ModelViewSet):
     """CRUD pièces requises — lecture publique, écriture Super Admin."""
     serializer_class = PieceRequiseSerializer
@@ -227,6 +288,140 @@ class PieceRequiseViewSet(viewsets.ModelViewSet):
         if self.action in ['list', 'retrieve']:
             return [AllowAny()]
         return [IsSuperAdmin()]
+
+
+
+# ─────────────────────────────────────────────────────────────
+# HELPER : Notifications automatiques par étape
+# ─────────────────────────────────────────────────────────────
+
+def _notifier_prochaine_etape(demande, etape_code, acteur_courant):
+    """
+    Envoie une notification email à l'acteur suivant dans le circuit.
+    Appelé après chaque transition dans transmettre().
+    """
+    from api.models import Notification
+    from django.core.mail import send_mail
+    from django.conf import settings
+
+    # Mapping etape_code → (rôle suivant, message)
+    NOTIFICATIONS = {
+        'SC_RECEPTION': {
+            'role':    'SEC_CENTRAL',
+            'titre':   'Accusé de réception enregistré',
+            'message': f"Le dossier {demande.numero_ref} a été réceptionné. Prêt pour transmission au SG.",
+        },
+        'SC_TRANSMISSION_SG': {
+            'role':    'SEC_GENERAL',
+            'titre':   'Nouveau dossier à traiter — Secrétariat Général',
+            'message': f"Le dossier {demande.numero_ref} ({demande.type_demande.libelle}) vous a été transmis par le Secrétariat Central.",
+        },
+        'DGI_SEC_IMPRESSION': {
+            'role':    'DGI_SECRETARIAT',
+            'titre':   'Dossier disponible — Impression requise',
+            'message': f"Le dossier {demande.numero_ref} est disponible pour impression. Merci de procéder à l'impression pour le circuit papier.",
+        },
+        'SG_TRANSMISSION_MIN': {
+            'role':    'MINISTRE',
+            'titre':   'Dossier soumis à votre appréciation — Ministre',
+            'message': f"Le Secrétaire Général vous a transmis le dossier {demande.numero_ref} ({demande.type_demande.libelle}) pour lecture et transmission.",
+        },
+        'SG_TRANSMISSION_DGI': {
+            'role':    'DGI_DIRECTEUR',
+            'titre':   'Nouveau dossier en instruction — DGI',
+            'message': f"Le dossier {demande.numero_ref} vous a été transmis directement par le SG pour instruction technique.",
+        },
+        'MIN_TRANSMISSION_DGI': {
+            'role':    'DGI_DIRECTEUR',
+            'titre':   'Nouveau dossier en instruction — DGI',
+            'message': f"Le dossier {demande.numero_ref} vous a été transmis par le Ministre pour instruction technique.",
+        },
+        'DGI_TRANSMISSION_DDPI': {
+            'role':    'DDPI_DIRECTEUR',
+            'titre':   'Dossier transmis à la DDPI — Action requise',
+            'message': f"La DGI vous a transmis le dossier {demande.numero_ref} ({demande.type_demande.libelle}) pour traitement.",
+        },
+        'DDPI_CHEF_BP': {
+            'role':    'DDPI_CHEF_BP',
+            'titre':   'Dossier BP assigné — Chef Service Boulangeries',
+            'message': f"Le dossier BP {demande.numero_ref} vous a été orienté pour traitement.",
+        },
+        'DDPI_CHEF_USINES': {
+            'role':    'DDPI_CHEF_USINES',
+            'titre':   'Dossier Usine assigné — Chef Service Usines',
+            'message': f"Le dossier {demande.numero_ref} ({demande.type_demande.libelle}) vous a été orienté pour traitement.",
+        },
+        'DDPI_COMMISSION_BP': {
+            'role':    'SEC_COMITE_BP',
+            'titre':   'Dossier soumis en commission BP — PV requis',
+            'message': f"Le dossier {demande.numero_ref} est soumis en commission BP. Merci d'enregistrer le résultat et de déposer le PV.",
+        },
+        'DDPI_PV_COMITE_BP': {
+            'role':    'DDPI_CHEF_BP',
+            'titre':   'PV comité BP déposé — Quittance attendue',
+            'message': f"Le PV du comité BP pour le dossier {demande.numero_ref} a été déposé. En attente de la quittance de paiement.",
+        },
+        'DDPI_ACCORD_PRINCIPE': {
+            'role':    'DGI_DIRECTEUR',
+            'titre':   'Accord de principe accordé — Signature DGI requise',
+            'message': f"La DDPI a accordé l'accord de principe pour {demande.numero_ref}. Signature DGI requise.",
+        },
+        'DGI_SIGNATURE': {
+            'role':    'MMI_SIGNATAIRE',
+            'titre':   'Arrêté prêt pour signature — Ministre / Signataire MMI',
+            'message': f"Le dossier {demande.numero_ref} est prêt pour la signature officielle du Ministre.",
+        },
+        'DDPI_INCOMPLET': {
+            'role':    'DEMANDEUR',
+            'titre':   'Action requise — Dossier incomplet',
+            'message': f"Votre dossier {demande.numero_ref} présente des éléments manquants. Connectez-vous pour consulter le motif.",
+        },
+        'DDPI_REJET': {
+            'role':    'DEMANDEUR',
+            'titre':   'Décision sur votre dossier',
+            'message': f"Votre dossier {demande.numero_ref} a fait l'objet d'une décision. Connectez-vous pour en consulter le détail.",
+        },
+    }
+
+    notif_config = NOTIFICATIONS.get(etape_code)
+    if not notif_config:
+        return
+
+    role_cible = notif_config['role']
+    titre      = notif_config['titre']
+    message    = notif_config['message']
+
+    # Trouver les utilisateurs du rôle cible
+    from api.models import UserRole, Notification as Notif, User
+    if role_cible == 'DEMANDEUR':
+        destinataires = [demande.demandeur]
+    else:
+        user_ids = UserRole.objects.filter(
+            role__code=role_cible, actif=True
+        ).values_list('user_id', flat=True)
+        destinataires = User.objects.filter(id__in=user_ids, is_active=True)
+
+    for dest in destinataires:
+        # Notification en base
+        Notif.objects.create(
+            destinataire=dest,
+            demande=demande,
+            type_notif='ACTION_REQUISE',
+            titre=titre,
+            message=message,
+        )
+        # Email
+        if dest.email:
+            try:
+                send_mail(
+                    subject=f"[MMI] {titre}",
+                    message=f"Bonjour {dest.nom_complet},\n\n{message}\n\nConnectez-vous sur : https://plateforme.mmi.gov.mr\n\nCordialement,\nPlateforme MMIAPP",
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[dest.email],
+                    fail_silently=True,
+                )
+            except Exception:
+                pass
 
 
 class DemandeViewSet(viewsets.ModelViewSet):
@@ -266,6 +461,7 @@ class DemandeViewSet(viewsets.ModelViewSet):
         """
         POST /api/demandes/{id}/transmettre/
         Effectue une transition de statut avec enregistrement dans le journal.
+        Supporte pièce jointe via multipart/form-data.
         """
         demande = self.get_object()
         serializer = TransitionStatutSerializer(data=request.data)
@@ -276,27 +472,39 @@ class DemandeViewSet(viewsets.ModelViewSet):
 
         # Mapping etape_code → nouveau statut
         TRANSITIONS = {
-            'SC_RECEPTION':          'EN_RECEPTION',
-            'SC_TRANSMISSION_SG':    'TRANSMISE_SG',
-            'SG_LECTURE':            'EN_LECTURE_SG',
-            'SG_TRANSMISSION_MIN':   'TRANSMISE_MINISTRE',
-            'SG_TRANSMISSION_DGI':   'EN_INSTRUCTION_DGI',
-            'MIN_LECTURE':           'EN_LECTURE_MINISTRE',
-            'MIN_TRANSMISSION_DGI':  'EN_INSTRUCTION_DGI',
-            'DGI_INSTRUCTION':       'EN_INSTRUCTION_DGI',
-            'DGI_TRANSMISSION_DDPI': 'EN_TRAITEMENT_DDPI',
-            'DDPI_VERIFICATION':     'EN_TRAITEMENT_DDPI',
-            'DDPI_INCOMPLET':        'DOSSIER_INCOMPLET',
-            'DDPI_VISITE':           'VISITE_PROGRAMMEE',
-            'DDPI_COMMISSION_BP':    'EN_COMMISSION_BP',
-            'DDPI_ACCORD_PRINCIPE':  'ACCORD_PRINCIPE',
-        'ARRETE_EN_COURS':       'ARRETE_EN_COURS',
-            'DDPI_REJET':            'REJETE',
-            'DDPI_CHEF_SERVICE':     'EN_TRAITEMENT_DDPI',
-        'DDPI_ARRETE_REDACTION':  'ARRETE_EN_COURS',
-            'DGI_SIGNATURE':         'SIGNATURE_DGI',
-            'MMI_SIGNATURE':         'SIGNATURE_MMI',
-            'SYSTEME_VALIDATION':    'VALIDE',
+            # Secrétariat Central
+            'SC_RECEPTION':           'EN_RECEPTION',
+            'SC_TRANSMISSION_SG':     'TRANSMISE_SG',
+            # Secrétariat DGI — impression
+            'DGI_SEC_IMPRESSION':     'PRET_IMPRESSION_DGI',
+            # Secrétaire Général
+            'SG_LECTURE':             'EN_LECTURE_SG',
+            'SG_TRANSMISSION_MIN':    'TRANSMISE_MINISTRE',
+            'SG_TRANSMISSION_DGI':    'EN_INSTRUCTION_DGI',
+            # Ministre
+            'MIN_LECTURE':            'EN_LECTURE_MINISTRE',
+            'MIN_TRANSMISSION_DGI':   'EN_INSTRUCTION_DGI',
+            # DGI
+            'DGI_INSTRUCTION':        'EN_INSTRUCTION_DGI',
+            'DGI_TRANSMISSION_DDPI':  'EN_TRAITEMENT_DDPI',
+            'DGI_SIGNATURE':          'SIGNATURE_DGI',
+            # DDPI Directeur — orientation
+            'DDPI_VERIFICATION':      'EN_TRAITEMENT_DDPI',
+            'DDPI_INCOMPLET':         'DOSSIER_INCOMPLET',
+            'DDPI_CHEF_BP':           'EN_TRAITEMENT_DDPI_BP',
+            'DDPI_CHEF_USINES':       'EN_TRAITEMENT_DDPI_US',
+            # DDPI Chefs de service
+            'DDPI_VISITE':            'VISITE_PROGRAMMEE',
+            'DDPI_PV_VISITE':         'EN_TRAITEMENT_DDPI',
+            'DDPI_COMMISSION_BP':     'EN_COMMISSION_BP',
+            'DDPI_PV_COMITE_BP':      'PV_COMITE_DEPOSE',
+            'DDPI_QUITTANCE_BP':      'ATTENTE_QUITTANCE',
+            'DDPI_ACCORD_PRINCIPE':   'ACCORD_PRINCIPE',
+            'DDPI_ARRETE_REDACTION':  'ARRETE_EN_COURS',
+            'DDPI_REJET':             'REJETE',
+            # MMI / Ministre
+            'MMI_SIGNATURE':          'SIGNATURE_MMI',
+            'SYSTEME_VALIDATION':     'VALIDE',
         }
 
         nouveau_statut = TRANSITIONS.get(data['etape_code'])
@@ -304,7 +512,7 @@ class DemandeViewSet(viewsets.ModelViewSet):
             demande.statut = nouveau_statut
             demande.save()
 
-        EtapeTraitement.objects.create(
+        etape = EtapeTraitement(
             demande=demande,
             acteur=request.user,
             etape_code=data['etape_code'],
@@ -313,6 +521,10 @@ class DemandeViewSet(viewsets.ModelViewSet):
             action=data['action'],
             commentaire=data.get('commentaire', ''),
         )
+        # Pièce jointe optionnelle
+        if 'piece_jointe' in request.FILES:
+            etape.piece_jointe = request.FILES['piece_jointe']
+        etape.save()
 
         logger.info(f"Demande {demande.numero_ref} : {statut_avant} → {demande.statut} par {request.user.nom_complet}")
 
@@ -370,12 +582,17 @@ class DemandeViewSet(viewsets.ModelViewSet):
                 'statut':          'active',
                 'wilaya':          demande.wilaya or '',
                 'adresse':         demande.adresse or '',
-                'latitude':        demande.latitude,
+                'latitude':        demande.latitude,    # GPS auto depuis la demande
                 'longitude':       demande.longitude,
                 'date_delivrance': date.today(),
                 'date_expiration': date_exp,
             }
         )
+        # Si autorisation déjà existante, mettre à jour le GPS
+        if not created and demande.latitude and not auto.latitude:
+            auto.latitude  = demande.latitude
+            auto.longitude = demande.longitude
+            auto.save()
 
         # Changer statut demande → VALIDE
         statut_avant = demande.statut
@@ -480,9 +697,19 @@ class DemandeViewSet(viewsets.ModelViewSet):
 
             # Créer le DocumentGenere lié à la demande
             from django.core.files import File
+            # Type de document selon le type de demande
+            TYPE_DOC_MAP = {
+                'BP':             'arrete_bp',
+                'USINE_EAU':      'arrete_conjoint',   # MMI + MCIAT
+                'UNITE':          'accord_principe',    # Accord de principe uniquement
+                'RENOUVELLEMENT': 'certificat',
+                'EXTENSION':      'attestation',
+            }
+            type_doc_final = TYPE_DOC_MAP.get(demande.type_demande.code, 'attestation')
+
             doc = DocumentGenere(
                 demande=demande,
-                type_doc='attestation',
+                type_doc=type_doc_final,
                 signataire=request.user,
                 signataire_role='MMI_SIGNATAIRE',
                 signe=True,
@@ -511,6 +738,61 @@ class DemandeViewSet(viewsets.ModelViewSet):
         if demande.demandeur != request.user:
             return Response({'error': 'Accès refusé.'}, status=403)
 
+    @action(detail=True, methods=['post'], url_path='upload-piece-agent',
+            permission_classes=[IsAgentInstitutionnel])
+    def upload_piece_agent(self, request, pk=None):
+        """POST /api/demandes/{id}/upload-piece-agent/ — agent joint un fichier à une étape."""
+        demande  = self.get_object()
+        fichier  = request.FILES.get('fichier')
+        etape_id = request.data.get('etape_id')
+        if not fichier:
+            return Response({'detail': 'Aucun fichier fourni.'}, status=400)
+        # Attacher à une étape existante si fourni
+        if etape_id:
+            try:
+                etape = EtapeTraitement.objects.get(pk=etape_id, demande=demande)
+                etape.piece_jointe = fichier
+                etape.save()
+                return Response({'message': 'Pièce jointe à l\'étape.', 'etape_id': etape.id})
+            except EtapeTraitement.DoesNotExist:
+                return Response({'detail': 'Étape introuvable.'}, status=404)
+        # Sinon attacher à la demande directement
+        from api.models import PieceJointe
+        pj = PieceJointe.objects.create(
+            demande=demande,
+            nom_original=fichier.name,
+            fichier=fichier,
+            taille_ko=fichier.size // 1024,
+        )
+        return Response({'message': 'Pièce jointe ajoutée.', 'id': pj.id})
+
+    @action(detail=True, methods=['get'], url_path='imprimer',
+            permission_classes=[IsAgentInstitutionnel])
+    def imprimer(self, request, pk=None):
+        """GET /api/demandes/{id}/imprimer/ — marque le dossier comme disponible pour impression."""
+        demande = self.get_object()
+        statut_avant = demande.statut
+        # Marquer le statut
+        if demande.statut == 'EN_RECEPTION':
+            demande.statut = 'PRET_IMPRESSION_DGI'
+            demande.save()
+        # Enregistrer l'étape
+        EtapeTraitement.objects.create(
+            demande=demande,
+            acteur=request.user,
+            etape_code='DGI_SEC_IMPRESSION',
+            statut_avant=statut_avant,
+            statut_apres=demande.statut,
+            action='Dossier mis à disposition pour impression — circuit papier',
+            commentaire=request.data.get('commentaire', ''),
+        )
+        # Retourner les données du dossier pour impression
+        from api.serializers import DemandeDetailSerializer
+        return Response({
+            'message': 'Dossier marqué pour impression.',
+            'demande': DemandeDetailSerializer(demande, context={'request': request}).data,
+        })
+
         fichier = request.FILES.get('fichier')
         if not fichier:
             return Response({'error': 'Aucun fichier fourni.'}, status=400)
@@ -531,7 +813,8 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user)
+        qs = Notification.objects.filter(destinataire=self.request.user)
+        return qs.order_by('-created_at')
 
     @action(detail=True, methods=['post'], url_path='marquer-lu')
     def marquer_lu(self, request, pk=None):
@@ -543,6 +826,12 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     def tout_lire(self, request):
         self.get_queryset().update(lu=True)
         return Response({'message': 'Toutes les notifications marquées comme lues.'})
+
+    @action(detail=False, methods=['get'], url_path='non-lues-count')
+    def non_lues_count(self, request):
+        """GET /api/notifications/non-lues-count/ — nombre de notifications non lues."""
+        count = self.get_queryset().filter(lu=False).count()
+        return Response({'count': count})
 
 
 # ─────────────────────────────────────────────────────────────
@@ -760,6 +1049,39 @@ class PasswordChangeView(generics.GenericAPIView):
         return Response({'detail': 'Mot de passe modifié avec succès.'})
 
 
+# ─────────────────────────────────────────────────────────────
+# RESET MOT DE PASSE (lien email)
+# ─────────────────────────────────────────────────────────────
+
+class ResetPasswordConfirmView(generics.GenericAPIView):
+    """POST /api/auth/reset-password-confirm/ — confirme le nouveau mot de passe via token."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        uidb64   = request.data.get('uidb64', '')
+        token    = request.data.get('token', '')
+        password = request.data.get('password', '')
+
+        if not all([uidb64, token, password]):
+            return Response({'detail': 'Données manquantes.'}, status=400)
+
+        if len(password) < 8:
+            return Response({'detail': 'Le mot de passe doit contenir au moins 8 caractères.'}, status=400)
+
+        try:
+            uid  = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({'detail': 'Lien invalide ou expiré.'}, status=400)
+
+        if not default_token_generator.check_token(user, token):
+            return Response({'detail': 'Lien expiré ou déjà utilisé.'}, status=400)
+
+        user.set_password(password)
+        user.save()
+        return Response({'detail': 'Mot de passe réinitialisé avec succès.'})
+
+
 class PasswordResetRequestView(generics.GenericAPIView):
     """POST /api/auth/password-reset/ — demande de réinitialisation par email."""
     permission_classes = [AllowAny]
@@ -768,13 +1090,20 @@ class PasswordResetRequestView(generics.GenericAPIView):
         email = request.data.get('email', '').strip().lower()
         try:
             user = User.objects.get(email=email, is_active=True)
-            import secrets
             from django.core.mail import send_mail
-            token = secrets.token_urlsafe(32)
-            reset_url = f"{settings.FRONTEND_URL}/reset-password/{token}"
+            uid   = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            reset_url = f"{settings.FRONTEND_URL}/reset-password/{uid}/{token}/"
             send_mail(
                 subject="Réinitialisation de votre mot de passe — MMI",
-                message=f"Cliquez sur ce lien pour réinitialiser votre mot de passe :\n\n{reset_url}\n\nCe lien expire dans 1 heure.",
+                message=(
+                    f"Bonjour {user.nom_complet},\n\n"
+                    f"Cliquez sur ce lien pour réinitialiser votre mot de passe :\n\n"
+                    f"{reset_url}\n\n"
+                    f"Ce lien est valable 72 heures.\n\n"
+                    f"Si vous n\'avez pas demandé cette réinitialisation, ignorez cet email.\n\n"
+                    f"Cordialement,\nL\'équipe MMI"
+                ),
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[email],
                 fail_silently=True,
@@ -1088,12 +1417,20 @@ class AdminActualiteView(generics.GenericAPIView):
     def post(self, request):
         from api.models import Actualite
         data = request.data
-        art = Actualite.objects.create(
+        # publie peut arriver comme string "true"/"false" via multipart
+        publie_val = data.get('publie', False)
+        if isinstance(publie_val, str):
+            publie_val = publie_val.lower() in ('true', '1', 'yes')
+        art = Actualite(
             titre=data.get('titre', ''),
             contenu=data.get('contenu', ''),
-            publie=data.get('publie', False),
+            publie=publie_val,
             auteur=request.user,
         )
+        # Gérer l'image si envoyée en multipart
+        if 'image' in request.FILES:
+            art.image = request.FILES['image']
+        art.save()
         return Response({'id': art.id, 'titre': art.titre, 'slug': art.slug}, status=201)
 
 
@@ -1107,9 +1444,18 @@ class AdminActualiteDetailView(generics.GenericAPIView):
             art = Actualite.objects.get(pk=pk)
         except Actualite.DoesNotExist:
             return Response({'detail': 'Introuvable'}, status=404)
-        for field in ['titre', 'contenu', 'publie']:
+        for field in ['titre', 'contenu']:
             if field in request.data:
                 setattr(art, field, request.data[field])
+        # publie peut arriver comme string via multipart
+        if 'publie' in request.data:
+            val = request.data['publie']
+            if isinstance(val, str):
+                val = val.lower() in ('true', '1', 'yes')
+            art.publie = val
+        # Image
+        if 'image' in request.FILES:
+            art.image = request.FILES['image']
         art.save()
         return Response({'detail': 'Modifié'})
 
@@ -1287,6 +1633,96 @@ class PasswordChangeView(generics.GenericAPIView):
         return Response({'detail': 'Mot de passe modifié avec succès.'})
 
 
+
+class QuittanceBPView(generics.GenericAPIView):
+    """
+    POST /api/demandes/{id}/quittance-bp/
+    Secrétaire comité BP dépose la quittance de paiement après approbation PV.
+    """
+    permission_classes = [IsAgentInstitutionnel]
+
+    def post(self, request, pk=None):
+        from api.models import Demande, EtapeTraitement
+        try:
+            demande = Demande.objects.get(pk=pk)
+        except Demande.DoesNotExist:
+            return Response({'detail': 'Dossier introuvable.'}, status=404)
+
+        if demande.statut not in ['PV_COMITE_DEPOSE', 'ATTENTE_QUITTANCE']:
+            return Response({'detail': 'Ce dossier n\'est pas en attente de quittance.'}, status=400)
+
+        if 'quittance' not in request.FILES:
+            return Response({'detail': 'Veuillez joindre le fichier de quittance.'}, status=400)
+
+        statut_avant = demande.statut
+        demande.statut = 'ATTENTE_QUITTANCE'
+        demande.save()
+
+        etape = EtapeTraitement.objects.create(
+            demande=demande,
+            acteur=request.user,
+            etape_code='DDPI_QUITTANCE_BP',
+            statut_avant=statut_avant,
+            statut_apres='ATTENTE_QUITTANCE',
+            action='Quittance de paiement reçue et enregistrée',
+            commentaire=request.data.get('commentaire', ''),
+        )
+        etape.piece_jointe = request.FILES['quittance']
+        etape.save()
+
+        _notifier_prochaine_etape(demande, 'DDPI_QUITTANCE_BP', request.user)
+        return Response({'message': 'Quittance enregistrée.', 'etape_id': etape.id})
+
+
+class PVComiteBPView(generics.GenericAPIView):
+    """
+    POST /api/demandes/{id}/pv-comite-bp/
+    Secrétaire comité BP dépose le PV d\'approbation du comité.
+    """
+    permission_classes = [IsAgentInstitutionnel]
+
+    def post(self, request, pk=None):
+        from api.models import Demande, EtapeTraitement
+        try:
+            demande = Demande.objects.get(pk=pk)
+        except Demande.DoesNotExist:
+            return Response({'detail': 'Dossier introuvable.'}, status=404)
+
+        if demande.statut != 'EN_COMMISSION_BP':
+            return Response({'detail': 'Ce dossier n\'est pas en commission BP.'}, status=400)
+
+        if 'pv' not in request.FILES:
+            return Response({'detail': 'Veuillez joindre le fichier PV.'}, status=400)
+
+        approuve = request.data.get('approuve', 'true').lower() == 'true'
+        statut_avant = demande.statut
+
+        if approuve:
+            demande.statut = 'PV_COMITE_DEPOSE'
+        else:
+            demande.statut = 'REJETE'
+
+        demande.save()
+
+        etape = EtapeTraitement.objects.create(
+            demande=demande,
+            acteur=request.user,
+            etape_code='DDPI_PV_COMITE_BP',
+            statut_avant=statut_avant,
+            statut_apres=demande.statut,
+            action=f"PV comité BP {'approuvé' if approuve else 'rejeté'} — document déposé",
+            commentaire=request.data.get('commentaire', ''),
+        )
+        etape.piece_jointe = request.FILES['pv']
+        etape.save()
+
+        _notifier_prochaine_etape(demande, 'DDPI_PV_COMITE_BP', request.user)
+        return Response({
+            'message': f"PV {'approuvé' if approuve else 'rejeté'}. Dossier mis à jour.",
+            'statut':  demande.statut,
+        })
+
+
 # ─────────────────────────────────────────────────────────────
 # CONFIGURATION PLATEFORME
 # ─────────────────────────────────────────────────────────────
@@ -1317,3 +1753,192 @@ class ConfigPlateformeView(generics.GenericAPIView):
             obj.save()
             updated.append(cle)
         return Response({'message': f'{len(updated)} parametre(s) mis a jour.', 'updated': updated})
+
+
+# ─────────────────────────────────────────────────────────────
+# QUITTANCE PAIEMENT (après comité BP)
+# ─────────────────────────────────────────────────────────────
+
+class QuittancePaiementView(generics.GenericAPIView):
+    """POST /api/demandes/{id}/quittance/ — dépôt quittance paiement BP."""
+    permission_classes = [IsAgentInstitutionnel]
+
+    def post(self, request, pk=None):
+        from api.models import Demande, QuittancePaiement, EtapeTraitement, Notification
+        try:
+            demande = Demande.objects.get(pk=pk)
+        except Demande.DoesNotExist:
+            return Response({'detail': 'Demande introuvable.'}, status=404)
+
+        if demande.statut not in ['PV_COMITE_DEPOSE', 'EN_COMMISSION_BP', 'ATTENTE_QUITTANCE']:
+            return Response({'detail': 'La quittance ne peut etre deposee qu apres approbation du comite BP.'}, status=400)
+
+        fichier = request.FILES.get('fichier')
+        if not fichier:
+            return Response({'detail': 'Fichier quittance obligatoire.'}, status=400)
+
+        q, created = QuittancePaiement.objects.get_or_create(
+            demande=demande,
+            defaults={
+                'fichier':    fichier,
+                'montant':    request.data.get('montant'),
+                'reference':  request.data.get('reference', ''),
+                'depose_par': request.user,
+                'valide':     True,
+            }
+        )
+        if not created:
+            q.fichier   = fichier
+            q.montant   = request.data.get('montant')
+            q.reference = request.data.get('reference', '')
+            q.valide    = True
+            q.save()
+
+        statut_avant = demande.statut
+        demande.statut = 'ACCORD_PRINCIPE'
+        demande.save()
+
+        EtapeTraitement.objects.create(
+            demande=demande, acteur=request.user,
+            etape_code='DDPI_QUITTANCE_BP',
+            statut_avant=statut_avant, statut_apres='ACCORD_PRINCIPE',
+            action='Quittance de paiement deposee — Accord de principe accorde',
+            commentaire=request.data.get('commentaire', ''),
+        )
+
+        Notification.objects.create(
+            destinataire=demande.demandeur, demande=demande,
+            type_notif='ACCORD_PRINCIPE',
+            titre='Accord de principe accordé',
+            message=f'Votre demande {demande.numero_ref} a recu un accord de principe apres validation du comite BP et reception de votre quittance de paiement.',
+        )
+        return Response({'message': 'Quittance deposee — Accord de principe accorde.', 'statut': 'ACCORD_PRINCIPE'})
+
+
+class PVComiteBPView(generics.GenericAPIView):
+    """POST /api/demandes/{id}/pv-comite/ — depot PV comite BP."""
+    permission_classes = [IsAgentInstitutionnel]
+
+    def post(self, request, pk=None):
+        from api.models import Demande, EtapeTraitement, Notification
+        try:
+            demande = Demande.objects.get(pk=pk)
+        except Demande.DoesNotExist:
+            return Response({'detail': 'Demande introuvable.'}, status=404)
+
+        statut_avant = demande.statut
+        demande.statut = 'PV_COMITE_DEPOSE'
+        demande.save()
+
+        etape = EtapeTraitement(
+            demande=demande, acteur=request.user,
+            etape_code='DDPI_PV_COMITE_BP',
+            statut_avant=statut_avant, statut_apres='PV_COMITE_DEPOSE',
+            action='PV du comite BP depose — En attente quittance paiement',
+            commentaire=request.data.get('commentaire', ''),
+        )
+        if 'piece_jointe' in request.FILES:
+            etape.piece_jointe = request.FILES['piece_jointe']
+        etape.save()
+
+        Notification.objects.create(
+            destinataire=demande.demandeur, demande=demande,
+            type_notif='ACCORD_PRINCIPE',
+            titre='Comite BP - Resultat favorable',
+            message=f'Votre demande {demande.numero_ref} a ete approuvee par le comite BP. Veuillez deposer votre quittance de paiement pour finaliser.',
+        )
+        return Response({'message': 'PV depose. En attente quittance.', 'statut': 'PV_COMITE_DEPOSE'})
+
+
+class ImprimerDossierView(generics.GenericAPIView):
+    """GET /api/demandes/{id}/imprimer/ — genere un recapitulatif imprimable du dossier."""
+    permission_classes = [IsAgentInstitutionnel]
+
+    def get(self, request, pk=None):
+        from api.models import Demande
+        try:
+            demande = Demande.objects.get(pk=pk)
+        except Demande.DoesNotExist:
+            return Response({'detail': 'Introuvable.'}, status=404)
+
+        from api.serializers import DemandeDetailSerializer
+        data = DemandeDetailSerializer(demande, context={'request': request}).data
+        return Response({
+            'demande':   data,
+            'print_url': f"/api/demandes/{pk}/imprimer/",
+            'message':   'Donnees pour impression disponibles.',
+        })
+
+
+class BackupDatabaseView(generics.GenericAPIView):
+    """GET /api/admin/backup/ — télécharge la base de données SQLite3."""
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        import os, mimetypes
+        from django.http import FileResponse
+        from django.conf import settings as dj_settings
+
+        db_path = dj_settings.DATABASES['default']['NAME']
+        if not os.path.exists(db_path):
+            return Response({'detail': 'Base de données introuvable.'}, status=404)
+
+        import datetime
+        filename = f"mmi_backup_{datetime.date.today().strftime('%Y%m%d')}.sqlite3"
+
+        response = FileResponse(
+            open(db_path, 'rb'),
+            content_type='application/octet-stream',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class ContactView(generics.GenericAPIView):
+    """POST /api/contact/ — formulaire de contact public."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        nom       = request.data.get('nom', '').strip()
+        email     = request.data.get('email', '').strip()
+        telephone = request.data.get('telephone', '').strip()
+        sujet     = request.data.get('sujet', '').strip()
+        message   = request.data.get('message', '').strip()
+
+        if not all([nom, email, message]):
+            return Response({'detail': 'Nom, email et message sont requis.'}, status=400)
+
+        from django.core.mail import send_mail
+        try:
+            send_mail(
+                subject=f'[MMI Contact] {sujet} — {nom}',
+                message=(
+                    f'Nouveau message depuis le formulaire de contact MMI\n\n'
+                    f'Nom       : {nom}\n'
+                    f'Email     : {email}\n'
+                    f'Téléphone : {telephone or "Non renseigné"}\n'
+                    f'Sujet     : {sujet}\n\n'
+                    f'Message :\n{message}\n'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[settings.DEFAULT_FROM_EMAIL],
+                reply_to=[email],
+                fail_silently=False,
+            )
+            # Email de confirmation au visiteur
+            send_mail(
+                subject='Votre message a été reçu — Ministère des Mines et de l\'Industrie',
+                message=(
+                    f'Bonjour {nom},\n\n'
+                    f'Nous avons bien reçu votre message et vous répondrons dans les meilleurs délais.\n\n'
+                    f'Sujet : {sujet}\n\n'
+                    f'Cordialement,\nMinistère des Mines et de l\'Industrie — Mauritanie'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=True,
+            )
+        except Exception as exc:
+            logger.warning(f'Email contact échoué: {exc}')
+
+        return Response({'detail': 'Message envoyé avec succès.'})

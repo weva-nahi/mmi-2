@@ -52,7 +52,7 @@ router.register(r'details/extension',        ExtensionDetailViewSet,          ba
 router.register(r'details/usine-eau',        UsineEauDetailViewSet,           basename='detail-usine-eau')
 router.register(r'details/unite',            UniteIndustrielleDetailViewSet,  basename='detail-unite')
 
-from api.views import DGIAnalyticsView, ExportView, AdminActualiteView, AdminActualiteDetailView, AdminDocumentView, AdminStatsView, AdminUserDetailView, ActivationCompteView, ConfigPlateformeView
+from api.views import DGIAnalyticsView, ExportView, AdminActualiteView, AdminActualiteDetailView, AdminDocumentView, AdminStatsView, AdminUserDetailView, ActivationCompteView, ConfigPlateformeView, ResetPasswordConfirmView, BackupDatabaseView, ImprimerDossierView, QuittanceBPView, PVComiteBPView, QuittancePaiementView, PVComiteBPView, ImprimerDossierView
 
 urlpatterns = [
     # Authentification
@@ -60,6 +60,8 @@ urlpatterns = [
     path('auth/activer/<str:uidb64>/<str:token>/', ActivationCompteView.as_view(), name='activer-compte'),
     path('auth/password-change/', PasswordChangeView.as_view(), name='password-change'),
     path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password-reset'),
+    path('auth/reset-password-confirm/', ResetPasswordConfirmView.as_view(), name='reset-password-confirm'),
+    path('auth/reset-password/<str:uidb64>/<str:token>/', ResetPasswordConfirmView.as_view(), name='reset-password-link'),
     path('auth/login/',           LoginView.as_view(),        name='auth-login'),
     path('auth/register/',        InscriptionView.as_view(),  name='auth-register'),
     path('auth/token/refresh/',   TokenRefreshView.as_view(), name='token-refresh'),
@@ -74,7 +76,15 @@ urlpatterns = [
     path('admin/documents/<int:pk>/',AdminDocumentView.as_view(),        name='admin-document-detail'),
     path('admin/users/<int:pk>/',    AdminUserDetailView.as_view(),      name='admin-user-detail'),
     path('export/renouvellements/', ExportView.as_view(),    name='export-renouvellements'),
+    # Impression DGI + circuit BP
+    path('demandes/<int:pk>/imprimer/',      ImprimerDossierView.as_view(), name='demande-imprimer'),
+    path('demandes/<int:pk>/pv-comite-bp/',  PVComiteBPView.as_view(),      name='pv-comite-bp'),
+    path('demandes/<int:pk>/quittance-bp/',  QuittanceBPView.as_view(),     name='quittance-bp'),
     path('admin/config-plateforme/', ConfigPlateformeView.as_view(), name='config-plateforme'),
+    path('admin/backup/',             BackupDatabaseView.as_view(),   name='admin-backup'),
+    path('demandes/<int:pk>/quittance/',   QuittancePaiementView.as_view(), name='quittance-paiement'),
+    path('demandes/<int:pk>/pv-comite/',   PVComiteBPView.as_view(),       name='pv-comite-bp'),
+    path('demandes/<int:pk>/imprimer/',    ImprimerDossierView.as_view(),  name='imprimer-dossier'),
 
     # Tous les ViewSets
     path('', include(router.urls)),

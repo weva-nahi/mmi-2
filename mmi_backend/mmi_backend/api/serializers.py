@@ -196,7 +196,13 @@ L'équipe MMI — Mauritanie
 # ─────────────────────────────────────────────────────────────
 
 class ActualiteSerializer(serializers.ModelSerializer):
-    auteur_nom = serializers.CharField(source='auteur.nom_complet', read_only=True)
+    auteur_nom = serializers.SerializerMethodField()
+
+    def get_auteur_nom(self, obj):
+        try:
+            return obj.auteur.nom_complet if obj.auteur else ''
+        except Exception:
+            return ''
 
     class Meta:
         model  = Actualite

@@ -15,16 +15,19 @@ print("\n=== Initialisation base de données MMI ===\n")
 
 # ── Rôles ─────────────────────────────────────────────────────
 ROLES = [
-    ('SUPER_ADMIN',     'Super Administrateur',      1),
-    ('DEMANDEUR',       'Demandeur',                10),
-    ('SEC_CENTRAL',     'Agent Secrétariat Central',20),
-    ('SEC_GENERAL',     'Secrétaire Général',       30),
-    ('MINISTRE',        'Ministre MMI',             40),
-    ('DGI_DIRECTEUR',   'Directeur DGI',            50),
-    ('DGI_SECRETARIAT', 'Secrétariat DGI',          51),
-    ('DDPI_CHEF',       'Chef Service DDPI',        60),
-    ('DDPI_AGENT',      'Agent DDPI',               61),
-    ('MMI_SIGNATAIRE',  'Signataire MMI',           70),
+    ('SUPER_ADMIN',      'Super Administrateur',                    1),
+    ('DEMANDEUR',        'Demandeur',                              10),
+    ('SEC_CENTRAL',      'Agent Secretariat Central',              20),
+    ('SEC_GENERAL',      'Secretaire General',                     30),
+    ('MINISTRE',         'Ministre MMI - Signataire',              40),
+    ('DGI_DIRECTEUR',    'Directeur General de l Industrie',       50),
+    ('DGI_SECRETARIAT',  'Secretariat DGI',                        51),
+    ('DDPI_DIRECTEUR',   'Directeur DDPI',                         60),
+    ('DDPI_CHEF_BP',     'Chef Service Boulangeries Patisseries',  61),
+    ('DDPI_CHEF_USINES', 'Chef Service Usines Industrielles',      62),
+    ('DDPI_AGENT',       'Agent DDPI',                             63),
+    ('SEC_COMITE_BP',    'Secretaire du Comite BP',                64),
+    ('MMI_SIGNATAIRE',   'Signataire MMI',                         70),
 ]
 print("1. Création des rôles...")
 for code, nom, niveau in ROLES:
@@ -64,6 +67,8 @@ TYPES = [
             ("Copie du cahier des charges signé",                                 True,  '.pdf',            9),
             ("Demande d'autorisation adressée au Ministre",                       True,  '.pdf',           10),
             ("Copie d'identité du propriétaire",                                  True,  '.pdf,.jpg,.png',11),
+            ("Titre de propriété foncière du terrain",                            True,  '.pdf,.jpg,.png',12),
+            ("Titre de propriété foncière ou bail du terrain",                    True,  '.pdf,.jpg,.png',12),
         ]
     },
     {
