@@ -9,10 +9,6 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
-from django.contrib.auth.tokens import default_token_generator
-from django.conf import settings
 import logging
 
 from .models import (
@@ -333,6 +329,179 @@ class DemandeViewSet(viewsets.ModelViewSet):
         demande = self.get_object()
         etapes  = demande.etapes.all()
         return Response(EtapeTraitementSerializer(etapes, many=True).data)
+
+    @action(detail=True, methods=['post'], url_path='valider-final',
+            permission_classes=[IsAgentInstitutionnel])
+    def valider_final(self, request, pk=None):
+        """
+        POST /api/demandes/{id}/valider-final/
+        Signature MMI → génère l'autorisation officielle + valide la demande.
+        """
+        demande = self.get_object()
+
+        # Créer l'autorisation officielle
+        from datetime import date, timedelta
+        from api.models import Autorisation, DocumentGenere
+
+        # Numéro autorisation : AUTO-{YEAR}-{TYPE}-{ID:04d}
+        annee = date.today().year
+        numero = f"AUTO-{annee}-{demande.type_demande.code}-{demande.id:04d}"
+
+        # Durée selon type
+        # BP, USINE_EAU, UNITE → renouvelables tous les 6 mois
+        # RENOUVELLEMENT → 6 mois également
+        # EXTENSION → pas de date d'expiration propre (rattachée à l'autorisation d'origine)
+        DUREES = {
+            'BP':             182,   # 6 mois
+            'USINE_EAU':      182,   # 6 mois
+            'UNITE':          182,   # 6 mois
+            'RENOUVELLEMENT': 182,   # 6 mois
+            'EXTENSION':      None,  # pas de période — rattachée à l'autorisation existante
+        }
+        duree = DUREES.get(demande.type_demande.code, 182)
+        date_exp = (date.today() + timedelta(days=duree)) if duree else None
+
+        # Créer ou récupérer l'autorisation
+        auto, created = Autorisation.objects.get_or_create(
+            demande=demande,
+            defaults={
+                'numero_auto':     numero,
+                'type':            demande.type_demande.code,
+                'statut':          'active',
+                'wilaya':          demande.wilaya or '',
+                'adresse':         demande.adresse or '',
+                'latitude':        demande.latitude,
+                'longitude':       demande.longitude,
+                'date_delivrance': date.today(),
+                'date_expiration': date_exp,
+            }
+        )
+
+        # Changer statut demande → VALIDE
+        statut_avant = demande.statut
+        demande.statut = 'VALIDE'
+        demande.save()
+
+        # Enregistrer l'étape MMI_SIGNATURE
+        EtapeTraitement.objects.create(
+            demande=demande,
+            acteur=request.user,
+            etape_code='MMI_SIGNATURE',
+            statut_avant=statut_avant,
+            statut_apres='VALIDE',
+            action="Signature officielle de l'arrêté par le MMI — Autorisation délivrée",
+            commentaire=request.data.get('commentaire', ''),
+        )
+
+        # Aussi enregistrer l'étape système VALIDATION
+        EtapeTraitement.objects.create(
+            demande=demande,
+            acteur=request.user,
+            etape_code='SYSTEME_VALIDATION',
+            statut_avant='VALIDE',
+            statut_apres='VALIDE',
+            action="Autorisation officielle générée et disponible au téléchargement",
+            commentaire='',
+        )
+
+        # Notification au demandeur
+        from api.models import Notification
+        Notification.objects.create(
+            destinataire=demande.demandeur,
+            demande=demande,
+            type_notif='VALIDATION',
+            titre='✅ Votre autorisation est prête !',
+            message=f"Félicitations ! Votre demande {demande.numero_ref} a été approuvée. "                    f"Votre autorisation N° {numero} est disponible sur votre espace."                    + (f" Date d'expiration : {date_exp.strftime('%d/%m/%Y')}." if date_exp else ""),
+        )
+
+        # Générer le PDF d'autorisation
+        try:
+            import sys, os
+            sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from generate_autorisation import generer_autorisation, CHAMPS_PAR_TYPE
+            from django.conf import settings as dj_settings
+            from api.models import ConfigPlateforme
+
+            # Récupérer les données dynamiques de la demande
+            dem = demande
+            config_type = CHAMPS_PAR_TYPE.get(dem.type_demande.code, CHAMPS_PAR_TYPE['BP'])
+
+            # Construire le data dict dynamiquement
+            pdf_data = {
+                'type_demande':           dem.type_demande.code,
+                'numero_auto':            numero,
+                'numero_ref':             dem.numero_ref,
+                'identifiant_demandeur':  dem.demandeur.identifiant_unique or dem.numero_ref,
+                'nom_responsable':        dem.demandeur.nom_complet,
+                'nif':                    getattr(dem.demandeur, 'nif', '') or '',
+                'telephone':              getattr(dem.demandeur, 'telephone', '') or '',
+                'email':                  dem.demandeur.email,
+                'adresse':                getattr(dem.demandeur, 'adresse_siege', '') or dem.adresse or '',
+                'forme_juridique':        getattr(dem.demandeur, 'forme_juridique', '') or '',
+                'nom_etablissement':      dem.raison_sociale or dem.demandeur.nom_entreprise or '',
+                'type_activite':          dem.activite or '',
+                'wilaya':                 dem.wilaya or '',
+                'adresse_local':          dem.adresse or '',
+                'description_activite':   dem.activite or '',
+                'capital_social':         '',
+                'emplois_directs':        '',
+                'ancien_numero':          '',
+                'date_delivrance':        date.today().strftime('%d/%m/%Y'),
+                'date_expiration':        date_exp.strftime('%d/%m/%Y') if date_exp else '',
+                'signataire_nom':         ConfigPlateforme.get('ministre_nom', 'Le Ministre'),
+                'signataire_titre':       ConfigPlateforme.get('ministre_titre', "Ministre des Mines et de l'Industrie"),
+                'plateforme_url':         ConfigPlateforme.get('plateforme_url', 'https://plateforme.mmi.gov.mr'),
+            }
+
+            # Données spécifiques selon type
+            if dem.type_demande.code == 'UNITE' and hasattr(dem, 'unite_detail'):
+                ud = dem.unite_detail
+                pdf_data['capital_social'] = str(ud.capital_social or '')
+                pdf_data['emplois_directs'] = str(ud.emplois_directs or '')
+                pdf_data['description_activite'] = ud.description_unite or dem.activite or ''
+            elif dem.type_demande.code == 'RENOUVELLEMENT' and hasattr(dem, 'renouvellement_detail'):
+                rd = dem.renouvellement_detail
+                pdf_data['ancien_numero'] = getattr(rd, 'numero_autorisation_original', '') or ''
+            elif dem.type_demande.code == 'EXTENSION' and hasattr(dem, 'extension_detail'):
+                ed = dem.extension_detail
+                pdf_data['ancien_numero'] = getattr(ed, 'numero_autorisation_original', '') or ''
+                pdf_data['description_extension'] = getattr(ed, 'description_extension', '') or ''
+
+            # Chemin logo
+            logo_path = os.path.join(dj_settings.BASE_DIR, '..', '..', 'mmi_frontend',
+                                     'mmi_frontend', 'public', 'images', 'logo_mmi.png')
+
+            # Générer le PDF
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+                pdf_path = tmp.name
+
+            generer_autorisation(pdf_data, pdf_path, logo_path if os.path.exists(logo_path) else None)
+
+            # Créer le DocumentGenere lié à la demande
+            from django.core.files import File
+            doc = DocumentGenere(
+                demande=demande,
+                type_doc='attestation',
+                signataire=request.user,
+                signataire_role='MMI_SIGNATAIRE',
+                signe=True,
+                date_signature=timezone.now(),
+            )
+            with open(pdf_path, 'rb') as f:
+                doc.fichier_pdf.save(f'autorisation_{numero}.pdf', File(f), save=True)
+            os.unlink(pdf_path)
+
+        except Exception as e:
+            import logging
+            logging.getLogger('api').warning(f"Erreur generation PDF: {e}")
+
+        return Response({
+            'message':       'Demande validée — Autorisation délivrée.',
+            'numero_auto':   numero,
+            'date_exp':      str(date_exp) if date_exp else None,
+            'autorisation_id': auto.id,
+        }, status=201)
 
     @action(detail=True, methods=['post'], url_path='upload-piece',
             permission_classes=[IsDemandeur])
@@ -1116,3 +1285,35 @@ class PasswordChangeView(generics.GenericAPIView):
         request.user.set_password(nouveau)
         request.user.save()
         return Response({'detail': 'Mot de passe modifié avec succès.'})
+
+
+# ─────────────────────────────────────────────────────────────
+# CONFIGURATION PLATEFORME
+# ─────────────────────────────────────────────────────────────
+
+class ConfigPlateformeView(generics.GenericAPIView):
+    """GET/POST /api/admin/config/ — lire et modifier les parametres."""
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [IsAuthenticated()]
+        return [IsSuperAdmin()]
+
+    def get(self, request):
+        from api.models import ConfigPlateforme
+        return Response({
+            'ministre_nom':   ConfigPlateforme.get('ministre_nom',   'Le Ministre'),
+            'ministre_titre': ConfigPlateforme.get('ministre_titre',  'Ministre des Mines et de l\'Industrie'),
+            'plateforme_url': ConfigPlateforme.get('plateforme_url',  'https://plateforme.mmi.gov.mr'),
+        })
+
+    def post(self, request):
+        from api.models import ConfigPlateforme
+        updated = []
+        for cle, valeur in request.data.items():
+            obj, _ = ConfigPlateforme.objects.get_or_create(cle=cle)
+            obj.valeur = valeur
+            obj.updated_by = request.user
+            obj.save()
+            updated.append(cle)
+        return Response({'message': f'{len(updated)} parametre(s) mis a jour.', 'updated': updated})

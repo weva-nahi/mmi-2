@@ -52,7 +52,7 @@ router.register(r'details/extension',        ExtensionDetailViewSet,          ba
 router.register(r'details/usine-eau',        UsineEauDetailViewSet,           basename='detail-usine-eau')
 router.register(r'details/unite',            UniteIndustrielleDetailViewSet,  basename='detail-unite')
 
-from api.views import DGIAnalyticsView, ExportView, AdminActualiteView, AdminActualiteDetailView, AdminDocumentView, AdminStatsView, AdminUserDetailView, ActivationCompteView
+from api.views import DGIAnalyticsView, ExportView, AdminActualiteView, AdminActualiteDetailView, AdminDocumentView, AdminStatsView, AdminUserDetailView, ActivationCompteView, ConfigPlateformeView
 
 urlpatterns = [
     # Authentification
@@ -74,6 +74,7 @@ urlpatterns = [
     path('admin/documents/<int:pk>/',AdminDocumentView.as_view(),        name='admin-document-detail'),
     path('admin/users/<int:pk>/',    AdminUserDetailView.as_view(),      name='admin-user-detail'),
     path('export/renouvellements/', ExportView.as_view(),    name='export-renouvellements'),
+    path('admin/config-plateforme/', ConfigPlateformeView.as_view(), name='config-plateforme'),
 
     # Tous les ViewSets
     path('', include(router.urls)),

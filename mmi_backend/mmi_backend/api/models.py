@@ -628,3 +628,32 @@ class UniteIndustrielleDetail(models.Model):
 
     def __str__(self):
         return f"Unité industrielle — {self.demande.numero_ref}"
+
+
+# ══════════════════════════════════════════════════════════════
+# CONFIGURATION PLATEFORME (nom ministre, paramètres admin)
+# ══════════════════════════════════════════════════════════════
+
+class ConfigPlateforme(models.Model):
+    """Paramètres globaux modifiables par le Super Admin."""
+    cle         = models.CharField(max_length=100, unique=True)
+    valeur      = models.TextField()
+    description = models.CharField(max_length=255, blank=True, default='')
+    updated_at  = models.DateTimeField(auto_now=True)
+    updated_by  = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='configs_modifiees'
+    )
+
+    class Meta:
+        db_table = 'config_plateforme'
+
+    def __str__(self):
+        return f"{self.cle} = {self.valeur[:50]}"
+
+    @classmethod
+    def get(cls, cle, defaut=''):
+        try:
+            return cls.objects.get(cle=cle).valeur
+        except cls.DoesNotExist:
+            return defaut
