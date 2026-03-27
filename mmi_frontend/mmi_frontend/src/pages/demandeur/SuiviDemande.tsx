@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Clock, MapPin, FileText, Download, CheckCircle, XCircle, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Clock, MapPin, FileText, Download, CheckCircle, XCircle, AlertTriangle, CreditCard, Upload } from 'lucide-react'
 import { demandesAPI } from '@/utils/api'
 import StatusBadge from '@/components/ui/StatusBadge'
 
 export default function SuiviDemande() {
   const { id } = useParams()
   const [demande, setDemande] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading]     = useState(true)
+  const [quittanceFile, setQuittanceFile] = useState<File | null>(null)
+  const [uploadingQ, setUploadingQ]       = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -16,6 +18,24 @@ export default function SuiviDemande() {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [id])
+
+  const uploadQuittance = async () => {
+    if (!quittanceFile || !demande) return
+    setUploadingQ(true)
+    try {
+      const fd = new FormData()
+      fd.append('fichier', quittanceFile)
+      await demandesAPI.uploadPiece(demande.id, fd)
+      const toast = (await import('react-hot-toast')).default
+      toast.success('Quittance déposée avec succès')
+      setQuittanceFile(null)
+    } catch {
+      const toast = (await import('react-hot-toast')).default
+      toast.error('Erreur lors du dépôt')
+    } finally {
+      setUploadingQ(false)
+    }
+  }
 
   if (loading) return (
     <div className="p-6 space-y-4">
@@ -137,6 +157,43 @@ export default function SuiviDemande() {
               <p className="text-xs text-orange-600 mt-1">
                 📞 DDPI : 00 222 43 45 11 00
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Quittance de paiement requise */}
+        {demande.statut === 'ATTENTE_QUITTANCE' && (
+          <div className="mt-3 bg-amber-50 border border-amber-300 rounded-xl p-4">
+            <div className="flex items-center gap-2 text-amber-700 font-bold text-sm mb-2">
+              <CreditCard size={16} /> Quittance de paiement requise
+            </div>
+            <p className="text-xs text-amber-600 mb-3">
+              Le comité BP a approuvé votre demande. Veuillez déposer la quittance de paiement
+              des frais d'autorisation pour finaliser votre dossier.
+            </p>
+            <div className="space-y-3">
+              <label className={`flex items-center gap-2 p-3 rounded-xl border-2 border-dashed cursor-pointer
+                ${quittanceFile ? 'border-amber-500 bg-amber-50' : 'border-gray-200 hover:border-amber-400'}`}>
+                <input type="file" className="hidden" accept=".pdf,.jpg,.png"
+                       onChange={e => setQuittanceFile(e.target.files?.[0] || null)} />
+                <Upload size={16} className={quittanceFile ? 'text-amber-600' : 'text-gray-400'} />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">
+                    {quittanceFile ? quittanceFile.name : 'Choisir la quittance (PDF, JPG, PNG)'}
+                  </p>
+                  <p className="text-xs text-gray-400">Scan ou photo de la quittance de paiement</p>
+                </div>
+              </label>
+              {quittanceFile && (
+                <button onClick={uploadQuittance} disabled={uploadingQ}
+                        className="w-full py-2.5 rounded-xl font-bold text-white text-sm flex items-center
+                                   justify-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60">
+                  {uploadingQ
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <><Upload size={14} /> Déposer la quittance</>
+                  }
+                </button>
+              )}
             </div>
           </div>
         )}

@@ -21,26 +21,28 @@ const MENU = [
 ]
 
 const ROLES_LABELS: Record<string, string> = {
-  DEMANDEUR:       'Demandeur industriel',
-  SEC_CENTRAL:     'Secrétariat Central',
-  SEC_GENERAL:     'Secrétaire Général',
-  MINISTRE:        'Ministre',
-  DGI_DIRECTEUR:   'Directeur DGI',
-  DGI_SECRETARIAT: 'Secrétariat DGI',
-  DDPI_CHEF:       'Chef Service DDPI',
-  DDPI_AGENT:      'Agent DDPI',
-  MMI_SIGNATAIRE:  'Signataire MMI',
-  SUPER_ADMIN:     'Super Administrateur',
+  DEMANDEUR:        'Demandeur industriel',
+  SEC_CENTRAL:      'Secrétariat Central',
+  SEC_GENERAL:      'Secrétaire Général',
+  MINISTRE:         'Ministre MMI — Signataire officiel',
+  DGI_DIRECTEUR:    "Directeur Général de l'Industrie",
+  DGI_SECRETARIAT:  'Secrétariat DGI',
+  DDPI_DIRECTEUR:   'Directeur DDPI',
+  DDPI_CHEF_BP:     'Chef Service Boulangeries / Pâtisseries',
+  DDPI_CHEF_USINES: 'Chef Service Usines Industrielles',
+  DDPI_AGENT:       'Agent DDPI',
+  SEC_COMITE_BP:    'Secrétaire du Comité BP',
+  MMI_SIGNATAIRE:   'Signataire MMI (alias Ministre)',
+  SUPER_ADMIN:      'Super Administrateur',
 }
 
 // Rôles agents (pas demandeur — le demandeur s'inscrit lui-même)
 const ROLES_AGENTS = [
   'SEC_CENTRAL','SEC_GENERAL','MINISTRE',
   'DGI_DIRECTEUR','DGI_SECRETARIAT',
-  'DDPI_CHEF','DDPI_AGENT',
-  'MMI_SIGNATAIRE','SUPER_ADMIN',
+  'DDPI_DIRECTEUR','DDPI_CHEF_BP','DDPI_CHEF_USINES','DDPI_AGENT',
+  'SEC_COMITE_BP','MMI_SIGNATAIRE','SUPER_ADMIN',
 ]
-
 // ── Layout ─────────────────────────────────────────────────────
 export default function AdminLayout() {
   const { pathname } = useLocation()
@@ -691,9 +693,16 @@ export function AdminConfig() {
           { label:'Pièces requises par type', desc:'Documents obligatoires par type de demande', icon:FileText,  link:'/admin/pieces-requises', color:'text-blue-600',  bg:'bg-blue-50'  },
           { label:'Rôles et permissions',     desc:"Créer et gérer les agents institutionnels",  icon:Shield,    link:'/admin/users',           color:'text-purple-600',bg:'bg-purple-50' },
           { label:'Paramètres email SMTP',    desc:'Outlook/Gmail pour les notifications auto',  icon:Bell,      link:null,                     color:'text-green-600', bg:'bg-green-50' },
-          { label:'Sauvegarde données',       desc:'Export SQLite3 de la base de données',       icon:Database,  link:null,                     color:'text-amber-600', bg:'bg-amber-50' },
+          { label:'Sauvegarde données',       desc:'Télécharger la base de données SQLite3',     icon:Database,  link:'/admin/backup',           color:'text-amber-600', bg:'bg-amber-50' },
         ].map(c=>(
-          <div key={c.label} onClick={()=>c.link&&window.location.assign(c.link)}
+          <div key={c.label}
+               onClick={()=>{
+                 if(c.link==='__backup__'){
+                   window.open('/api/admin/backup/','_blank')
+                 } else if(c.link){
+                   window.location.assign(c.link)
+                 }
+               }}
                className={`card p-5 ${c.link?'hover:shadow-md cursor-pointer':''}`}>
             <div className={`w-10 h-10 ${c.bg} rounded-xl flex items-center justify-center mb-3`}>
               <c.icon size={20} className={c.color}/>

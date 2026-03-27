@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Inbox, Send, CheckSquare, Clock, FileText } from 'lucide-react'
+import { Inbox, Send, CheckSquare, Clock, FileText, Upload, Paperclip } from 'lucide-react'
 import { demandesAPI } from '@/utils/api'
 import StatusBadge from '@/components/ui/StatusBadge'
 import AgentLayout from './AgentLayout'
@@ -61,7 +61,7 @@ export function SecretariatDashboard() {
 }
 
 export function SecretariatDossiers() {
-  return <DossiersList titre="File d'attente — Secrétariat Central" statutsFiltres={['SOUMISE','EN_RECEPTION']} linkBase="/secretariat/dossier" />
+  return <DossiersList titre="File d'attente — Secrétariat Central" statutsFiltres={['SOUMISE','EN_RECEPTION','PRET_IMPRESSION_DGI']} linkBase="/secretariat/dossier" />
 }
 
 export function SecretariatTransmis() {
@@ -74,8 +74,8 @@ export function SecretariatDossier() {
       backLink="/secretariat/dossiers"
       backLabel="Retour Secrétariat"
       actionsDisponibles={[
-        { etape_code:'SC_RECEPTION',       label:'Accuser réception',           action:'Accusé de réception et référencement du dossier', color:'blue',  icon:CheckSquare },
-        { etape_code:'SC_TRANSMISSION_SG', label:'Transmettre au Secrétaire Général', action:'Transmission au Secrétaire Général',         color:'green', icon:Send },
+        { etape_code:'SC_RECEPTION',       label:'Accuser réception',                action:'Accusé de réception numérique — dossier enregistré au Secrétariat Central', color:'blue',  icon:CheckSquare },
+        { etape_code:'SC_TRANSMISSION_SG', label:'Transmettre au Secrétaire Général', action:'Transmission officielle au Secrétaire Général pour orientation',           color:'green', icon:Send        },
       ]}
     />
   )

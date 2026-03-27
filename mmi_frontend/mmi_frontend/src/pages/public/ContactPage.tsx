@@ -20,15 +20,20 @@ export default function ContactPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    // Simulation envoi — à connecter à un endpoint Django /api/contact/
-    await new Promise(r => setTimeout(r, 1200))
-    setSent(true)
-    setLoading(false)
+    try {
+      const { api } = await import('@/utils/api')
+      await api.post('/contact/', form)
+      setSent(true)
+    } catch (err: any) {
+      const toast = (await import('react-hot-toast')).default
+      toast.error(err.response?.data?.detail || 'Erreur lors de l\'envoi. Réessayez.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
-      
       <div className="max-w-5xl mx-auto px-4 sm:px-6">
 
         {/* Titre */}

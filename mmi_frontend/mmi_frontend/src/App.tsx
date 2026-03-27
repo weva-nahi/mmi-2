@@ -40,13 +40,13 @@ import { SecretariatLayout, SecretariatDashboard, SecretariatDossiers, Secretari
 import { SGLayout, SGDashboard, SGDossiers, SGTraites, SGDossier } from '@/pages/agents/SGPages'
 
 // Ministre
-import { MinistreLayout, MinistreDashboard, MinistreDossiers, MinistreDossier } from '@/pages/agents/MinistреPages'
+import { MinistreLayout, MinistreDashboard, MinistreDossiers, MinistreTraites, MinistreDossier } from '@/pages/agents/MinistреPages'
 
 // DGI
-import { DGILayout, DGIDashboard, DGIDossiers, DGISignature, DGIDossier, DGIAnalyticsPage } from '@/pages/agents/DGIPages'
+import { DGILayout, DGIDashboard, DGIDossiers, DGISignature, DGIDossier, DGIAnalyticsPage, DGISecretariatDossier } from '@/pages/agents/DGIPages'
 
 // DDPI
-import { DDPILayout, DDPIDashboard, DDPIDossiers, DDPIVisites, DDPIComites, DDPIDossier } from '@/pages/agents/DDPIPages'
+import { DDPILayout, DDPIDashboard, DDPIDossiers, DDPIVisites, DDPIComites, DDPIDossier, DDPIChefBPDossier, DDPIChefUsinesDossier, SecretaireComiteBPDossier } from '@/pages/agents/DDPIPages'
 import FormulaireVisite   from '@/pages/agents/FormulaireVisite'
 import FormulaireComiteBP from '@/pages/agents/FormulaireComiteBP'
 import Distance500m       from '@/pages/agents/Distance500m'
@@ -154,6 +154,7 @@ export default function App() {
           <Route path="/ministre" element={<RouteGuard roles={['MINISTRE']}><MinistreLayout /></RouteGuard>}>
             <Route index              element={<MinistreDashboard />} />
             <Route path="dossiers"    element={<MinistreDossiers />} />
+            <Route path="traites"     element={<MinistreTraites />} />
             <Route path="dossier/:id" element={<MinistreDossier />} />
             <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
@@ -163,21 +164,24 @@ export default function App() {
             <Route index              element={<DGIDashboard />} />
             <Route path="dossiers"    element={<DGIDossiers />} />
             <Route path="signature"   element={<DGISignature />} />
-            <Route path="dossier/:id"  element={<DGIDossier />} />
-            <Route path="analytics"     element={<DGIAnalyticsPage />} />
+            <Route path="dossier/:id"         element={<DGIDossier />} />
+            <Route path="dossier-sec/:id"     element={<DGISecretariatDossier />} />
+            <Route path="analytics"           element={<DGIAnalyticsPage />} />
             <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
           {/* ── DDPI ── */}
-          <Route path="/ddpi" element={<RouteGuard roles={['DDPI_CHEF','DDPI_AGENT']}><DDPILayout /></RouteGuard>}>
-            <Route index              element={<DDPIDashboard />} />
-            <Route path="dossiers"    element={<DDPIDossiers />} />
-            <Route path="visites"     element={<DDPIVisites />} />
-            <Route path="commites"    element={<DDPIComites />} />
-            <Route path="dossier/:id"   element={<DDPIDossier />} />
-            <Route path="visite/:id"    element={<FormulaireVisite />} />
-            <Route path="comite-bp/:id" element={<FormulaireComiteBP />} />
-            <Route path="distance/:id"  element={<Distance500m />} />
+          <Route path="/ddpi" element={<RouteGuard roles={['DDPI_DIRECTEUR','DDPI_CHEF_BP','DDPI_CHEF_USINES','DDPI_AGENT','DDPI_CHEF','SEC_COMITE_BP']}><DDPILayout /></RouteGuard>}>
+            <Route index                   element={<DDPIDashboard />} />
+            <Route path="dossiers"         element={<DDPIDossiers />} />
+            <Route path="visites"          element={<DDPIVisites />} />
+            <Route path="commites"         element={<DDPIComites />} />
+            <Route path="dossier/:id"      element={<DDPIDossier />} />
+            <Route path="dossier-bp/:id"   element={<DDPIChefBPDossier />} />
+            <Route path="dossier-usines/:id" element={<DDPIChefUsinesDossier />} />
+            <Route path="comite-bp/:id"    element={<SecretaireComiteBPDossier />} />
+            <Route path="visite/:id"       element={<FormulaireVisite />} />
+            <Route path="distance/:id"     element={<Distance500m />} />
             <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 

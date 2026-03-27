@@ -1,5 +1,5 @@
-import React from 'react'
-import { Inbox, FileSignature, BarChart3, PenLine, Send, CheckSquare, ArrowRight } from 'lucide-react'
+import React, { useState } from 'react'
+import { Inbox, FileSignature, BarChart3, PenLine, Send, CheckSquare, ArrowRight, Printer } from 'lucide-react'
 import { demandesAPI } from '@/utils/api'
 import AgentLayout from './AgentLayout'
 import DossiersList from './DossiersList'
@@ -132,4 +132,86 @@ export function DGIDossier() {
 
 export function DGIAnalyticsPage() {
   return <DGIAnalytics />
+}
+
+// ── Secrétariat DGI — Impression ─────────────────────────────
+export function DGISecretariatDossier() {
+  const [imprimant, setImprimant] = useState(false)
+
+  const handleImprimer = async (demandeId: number) => {
+    setImprimant(true)
+    try {
+      const res = await demandesAPI.imprimer(demandeId)
+      // Ouvrir fenêtre impression avec données du dossier
+      const d = res.data.demande
+      const win = window.open('', '_blank')
+      if (!win) return
+      win.document.write(`
+        <html><head><title>Dossier ${d.numero_ref}</title>
+        <style>
+          body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; color: #1a1a1a; }
+          h1 { color: #1B6B30; border-bottom: 2px solid #C8A400; padding-bottom: 8px; }
+          h2 { color: #0A4A1E; margin-top: 24px; font-size: 14px; text-transform: uppercase; }
+          .row { display: flex; gap: 16px; margin: 6px 0; }
+          .label { color: #666; min-width: 160px; font-size: 12px; }
+          .value { font-weight: bold; font-size: 13px; }
+          .header { text-align: center; margin-bottom: 32px; }
+          .badge { background: #E8F5EC; color: #1B6B30; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+          @media print { button { display: none; } }
+        </style></head><body>
+        <div class="header">
+          <h1>MINISTÈRE DES MINES ET DE L'INDUSTRIE</h1>
+          <p>Direction Générale de l'Industrie — MMIAPP</p>
+        </div>
+        <h1>Dossier : ${d.numero_ref}</h1>
+        <span class="badge">${d.statut}</span>
+        <h2>Informations du dossier</h2>
+        <div class="row"><span class="label">Type de demande</span><span class="value">${d.type_demande?.libelle || '—'}</span></div>
+        <div class="row"><span class="label">Établissement</span><span class="value">${d.raison_sociale || '—'}</span></div>
+        <div class="row"><span class="label">Activité</span><span class="value">${d.activite || '—'}</span></div>
+        <div class="row"><span class="label">Wilaya</span><span class="value">${d.wilaya || '—'}</span></div>
+        <div class="row"><span class="label">Adresse</span><span class="value">${d.adresse || '—'}</span></div>
+        <div class="row"><span class="label">Date soumission</span><span class="value">${new Date(d.date_soumission).toLocaleDateString('fr-FR')}</span></div>
+        <h2>Demandeur</h2>
+        <div class="row"><span class="label">Nom</span><span class="value">${d.demandeur_nom || '—'}</span></div>
+        <div class="row"><span class="label">Identifiant</span><span class="value">${d.demandeur_identifiant || '—'}</span></div>
+        <div class="row"><span class="label">Email</span><span class="value">${d.demandeur_email || '—'}</span></div>
+        <h2>Circuit de traitement</h2>
+        ${(d.etapes || []).map((e: any) => `
+          <div class="row">
+            <span class="label">${e.etape_code}</span>
+            <span class="value">${e.action}</span>
+          </div>
+        `).join('')}
+        <br/><br/>
+        <button onclick="window.print()">🖨️ Imprimer</button>
+        </body></html>
+      `)
+      win.document.close()
+      setTimeout(() => win.print(), 500)
+    } catch (err: any) {
+      import('react-hot-toast').then(({ default: toast }) =>
+        toast.error(err.response?.data?.detail || 'Erreur impression')
+      )
+    } finally {
+      setImprimant(false)
+    }
+  }
+
+  return (
+    <DossierDetail
+      backLink="/dgi/dossiers"
+      backLabel="Retour Secrétariat DGI"
+      actionsDisponibles={[
+        { etape_code:'DGI_SEC_IMPRESSION', label:'Disponible pour impression',
+          action:'Dossier mis à disposition pour impression — circuit papier', color:'blue', icon:Printer },
+        { etape_code:'DGI_INSTRUCTION',    label:'Marquer en instruction',
+          action:'Instruction et annotation technique DGI', color:'yellow', icon:PenLine },
+        { etape_code:'DGI_TRANSMISSION_DDPI', label:'Transmettre à la DDPI',
+          action:'Transmission à la Direction du Développement Industriel', color:'green', icon:Send },
+        { etape_code:'DGI_SIGNATURE',      label:'Signer le document',
+          action:'Signature officielle du Directeur Général de l\'Industrie', color:'yellow', icon:FileSignature },
+      ]}
+    />
+  )
 }

@@ -77,6 +77,17 @@ export const demandesAPI = {
                  api.post(`/demandes/${id}/upload-piece/`, formData, {
                    headers: { 'Content-Type': 'multipart/form-data' },
                  }),
+  uploadPieceAgent: (id: number, formData: FormData) =>
+                 api.post(`/demandes/${id}/upload-piece-agent/`, formData, {
+                   headers: { 'Content-Type': 'multipart/form-data' },
+                 }),
+  imprimer: (id: number) => api.get(`/demandes/${id}/imprimer/`),
+  quittanceRecue: (id: number, commentaire?: string) =>
+                 api.post(`/demandes/${id}/transmettre/`, {
+                   etape_code: 'QUITTANCE_RECUE',
+                   action: 'Quittance de paiement reçue — accord de principe accordé',
+                   commentaire: commentaire || '',
+                 }),
 }
 
 // ── Types de demande ─────────────────────────────────────────
@@ -104,7 +115,8 @@ export const autorisationsAPI = {
 
 // ── Portail public ────────────────────────────────────────────
 export const portailAPI = {
-  actualites: (params?: object) => api.get('/public/actualites/', { params }),
+  actualites:       (params?: object) => api.get('/public/actualites/', { params }),
+  actualiteBySlug:  (slug: string)    => api.get(`/public/actualites/by-slug/${slug}/`),
   documents:  (params?: object) => api.get('/public/documents/', { params }),
   projets:    (params?: object) => api.get('/public/projets/',   { params }),
   contact:    (data: object)    => api.post('/public/contact/',   data),
@@ -160,6 +172,7 @@ export const adminAPI = {
   deleteDocument:   (id: number) => api.delete(`/admin/documents/${id}/`),
   // Configuration plateforme
   getConfig:  ()             => api.get('/admin/config-plateforme/'),
+  backup:     ()             => `${api.defaults.baseURL}/admin/backup/`,
   saveConfig: (data: object) => api.post('/admin/config-plateforme/', data),
 }
 

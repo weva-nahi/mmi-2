@@ -23,14 +23,9 @@ export default function ArticleDetailPage() {
   useEffect(() => {
     if (!slug) return
     setLoading(true)
-    // Récupérer l'article par slug
-    portailAPI.actualites({ search: slug, page_size: 1 })
-      .then(r => {
-        const all = r.data.results || r.data
-        const found = all.find((a: Article) => a.slug === slug)
-        if (found) setArticle(found)
-        else setNotFound(true)
-      })
+    // Récupérer l'article directement par slug
+    portailAPI.actualiteBySlug(slug)
+      .then(r => setArticle(r.data))
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
 

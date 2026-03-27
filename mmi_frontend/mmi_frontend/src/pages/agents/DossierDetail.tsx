@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Clock, User, FileText, Send, CheckCircle, XCircle, MapPin, Download, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Clock, User, FileText, Send, CheckCircle, XCircle, MapPin, Download, ExternalLink , Paperclip, Upload } from 'lucide-react'
 import { demandesAPI } from '@/utils/api'
 import { useAuthStore } from '@/store/authStore'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -54,6 +54,7 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
   const [demande, setDemande] = useState<Demande | null>(null)
   const [loading, setLoading] = useState(true)
   const [commentaire, setCommentaire] = useState('')
+  const [pieceJointe, setPieceJointe]   = useState<File | null>(null)
   const [transmitting, setTransmitting] = useState(false)
   const [activeTab, setActiveTab] = useState<'info'|'pieces'|'historique'>('info')
 
@@ -78,6 +79,12 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
 
     setTransmitting(true)
     try {
+      // Joindre une pièce si présente
+      if (pieceJointe) {
+        const fd = new FormData()
+        fd.append('fichier', pieceJointe)
+        await demandesAPI.uploadPieceAgent(demande.id, fd).catch(() => {})
+      }
       await demandesAPI.transmettre(demande.id, {
         etape_code,
         action,
@@ -88,6 +95,7 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
       const r = await demandesAPI.get(demande.id)
       setDemande(r.data)
       setCommentaire('')
+      setPieceJointe(null)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Erreur lors de la transition')
     } finally {
@@ -352,6 +360,51 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
                 <p className="text-xs text-gray-400 mt-1">
                   Ce commentaire sera visible par le demandeur et inclus dans la notification email.
                 </p>
+                {/* Pièce jointe optionnelle par agent */}
+                <div className="mt-3">
+                  <label className="form-label text-xs flex items-center gap-1.5">
+                    <Paperclip size={12} /> Pièce jointe (optionnel)
+                  </label>
+                  <label className={`flex items-center gap-2 p-2.5 rounded-xl border-2 border-dashed
+                    cursor-pointer transition-all mt-1
+                    ${pieceJointe ? 'border-mmi-green bg-mmi-green-lt' : 'border-gray-200 hover:border-mmi-green'}`}>
+                    <input type="file" className="hidden"
+                           accept=".pdf,.jpg,.png,.doc,.docx"
+                           onChange={e => setPieceJointe(e.target.files?.[0] || null)} />
+                    <Upload size={14} className={pieceJointe ? 'text-mmi-green' : 'text-gray-400'} />
+                    <span className="text-xs text-gray-600 truncate max-w-[180px]">
+                      {pieceJointe ? pieceJointe.name : 'Joindre un document...'}
+                    </span>
+                    {pieceJointe && (
+                      <button type="button"
+                              onClick={e => { e.preventDefault(); setPieceJointe(null) }}
+                              className="ml-auto text-red-400 hover:text-red-600 text-xs">✕</button>
+                    )}
+                  </label>
+                </div>
+
+              {/* Pièce jointe optionnelle */}
+              <div className="mt-3">
+                <label className="form-label text-xs flex items-center gap-1">
+                  <Paperclip size={12} /> Pièce jointe (optionnel)
+                </label>
+                <label className={`flex items-center gap-2 p-2.5 rounded-xl border-2 border-dashed
+                  cursor-pointer transition-all mt-1
+                  ${pieceJointe ? 'border-mmi-green bg-mmi-green-lt' : 'border-gray-200 hover:border-mmi-green'}`}>
+                  <input type="file" className="hidden"
+                         accept=".pdf,.jpg,.png,.doc,.docx"
+                         onChange={e => setPieceJointe(e.target.files?.[0] || null)} />
+                  <Upload size={14} className={pieceJointe ? 'text-mmi-green' : 'text-gray-400'} />
+                  <span className="text-xs text-gray-600 truncate max-w-[200px]">
+                    {pieceJointe ? pieceJointe.name : 'Joindre un document...'}
+                  </span>
+                  {pieceJointe && (
+                    <button type="button"
+                            onClick={e => { e.preventDefault(); setPieceJointe(null) }}
+                            className="ml-auto text-red-400 hover:text-red-600 text-xs">✕</button>
+                  )}
+                </label>
+              </div>
               </div>
 
               <div className="space-y-2">
