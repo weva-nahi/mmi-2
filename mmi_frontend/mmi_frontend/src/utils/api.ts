@@ -70,7 +70,9 @@ export const demandesAPI = {
     action:     string
     commentaire?: string
   }) => api.post(`/demandes/${id}/transmettre/`, data),
-  historique:  (id: number) => api.get(`/demandes/${id}/historique/`),
+  historique:   (id: number) => api.get(`/demandes/${id}/historique/`),
+  validerFinal: (id: number, commentaire?: string) =>
+                  api.post(`/demandes/${id}/valider-final/`, { commentaire: commentaire || '' }),
   uploadPiece: (id: number, formData: FormData) =>
                  api.post(`/demandes/${id}/upload-piece/`, formData, {
                    headers: { 'Content-Type': 'multipart/form-data' },
@@ -156,6 +158,9 @@ export const adminAPI = {
                         headers: { 'Content-Type': 'multipart/form-data' },
                       }),
   deleteDocument:   (id: number) => api.delete(`/admin/documents/${id}/`),
+  // Configuration plateforme
+  getConfig:  ()             => api.get('/admin/config-plateforme/'),
+  saveConfig: (data: object) => api.post('/admin/config-plateforme/', data),
 }
 
 // ── Visites & Comités BP ──────────────────────────────────────

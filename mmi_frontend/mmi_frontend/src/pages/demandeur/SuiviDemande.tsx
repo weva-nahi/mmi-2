@@ -142,9 +142,33 @@ export default function SuiviDemande() {
         )}
 
         {demande.statut === 'VALIDE' && (
-          <div className="flex items-center gap-2 text-green-700 text-sm mt-2 bg-green-50 rounded-lg p-3">
-            <CheckCircle size={16} />
-            Votre autorisation est disponible ! Téléchargez-la ci-dessous.
+          <div className="mt-3 bg-green-50 border border-mmi-green rounded-xl p-4">
+            <div className="flex items-center gap-2 text-mmi-green font-bold text-sm mb-2">
+              <CheckCircle size={16} /> Autorisation délivrée !
+            </div>
+            {demande.autorisation && (
+              <div className="grid grid-cols-2 gap-2 text-xs mt-2">
+                <div>
+                  <p className="text-green-700">Numéro d'autorisation</p>
+                  <p className="font-bold text-mmi-green font-mono">{demande.autorisation.numero_auto}</p>
+                </div>
+                <div>
+                  <p className="text-green-700">Date de délivrance</p>
+                  <p className="font-semibold text-gray-800">
+                    {new Date(demande.autorisation.date_delivrance).toLocaleDateString('fr-FR')}
+                  </p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-green-700">Date d'expiration</p>
+                  <p className="font-semibold text-gray-800">
+                    {demande.autorisation.date_expiration
+                      ? new Date(demande.autorisation.date_expiration).toLocaleDateString('fr-FR')
+                      : <span className="text-blue-600 italic">Sans expiration (extension)</span>
+                    }
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -177,27 +201,46 @@ export default function SuiviDemande() {
         </div>
       </div>
 
-      {/* Documents disponibles */}
-      {documentsValides.length > 0 && (
-        <div className="card p-6 mb-5">
-          <h3 className="font-semibold text-gray-700 mb-4 text-sm flex items-center gap-2">
-            <Download size={16} className="text-mmi-green" />
-            Documents disponibles
+      {/* Autorisation téléchargeable */}
+      {demande.statut === 'VALIDE' && demande.autorisation && (
+        <div className="card p-6 mb-5 border-2 border-mmi-green">
+          <h3 className="font-semibold text-mmi-green mb-4 text-sm flex items-center gap-2">
+            <Download size={16} /> Télécharger votre autorisation
           </h3>
           <div className="space-y-2">
+            {/* Autorisation officielle */}
+            <div className="flex items-center justify-between p-3 rounded-lg border border-mmi-green bg-mmi-green-lt">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 bg-mmi-green rounded-lg flex items-center justify-center">
+                  <FileText size={16} className="text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-mmi-green">
+                    Autorisation N° {demande.autorisation.numero_auto}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Délivrée le {new Date(demande.autorisation.date_delivrance).toLocaleDateString('fr-FR')}
+                    {demande.autorisation.date_expiration && ` — Expire le ${new Date(demande.autorisation.date_expiration).toLocaleDateString('fr-FR')}`}
+                  </p>
+                </div>
+              </div>
+              <span className="text-xs bg-mmi-green text-white px-2 py-1 rounded-full font-medium">Active</span>
+            </div>
+
+            {/* Documents PDF signés */}
             {documentsValides.map((doc: any) => (
               <a key={doc.id} href={doc.fichier_pdf} target="_blank" rel="noreferrer"
-                 className="flex items-center justify-between p-3 rounded-lg border border-mmi-green bg-mmi-green-lt hover:bg-green-100 transition-colors">
+                 className="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-mmi-green hover:bg-mmi-green-lt transition-colors">
                 <div className="flex items-center gap-2">
-                  <FileText size={16} className="text-mmi-green" />
+                  <FileText size={15} className="text-mmi-green" />
                   <div>
-                    <p className="text-sm font-medium text-mmi-green">{doc.type_doc}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm font-medium text-gray-800">{doc.type_doc}</p>
+                    <p className="text-xs text-gray-400">
                       Signé le {new Date(doc.date_signature).toLocaleDateString('fr-FR')}
                     </p>
                   </div>
                 </div>
-                <Download size={16} className="text-mmi-green" />
+                <Download size={15} className="text-mmi-green" />
               </a>
             ))}
           </div>

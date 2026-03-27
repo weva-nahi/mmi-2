@@ -660,10 +660,32 @@ export function AdminActualites() {
 
 // ── Configuration ──────────────────────────────────────────────
 export function AdminConfig() {
+  const [config, setConfig]   = useState({ ministre_nom:'', ministre_titre:'', plateforme_url:'' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving]   = useState(false)
+
+  useEffect(() => {
+    adminAPI.getConfig()
+      .then(r => setConfig(r.data))
+      .catch(()=>{})
+      .finally(()=>setLoading(false))
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await adminAPI.saveConfig(config)
+      toast.success('Configuration sauvegardée')
+    } catch { toast.error('Erreur sauvegarde') }
+    finally { setSaving(false) }
+  }
+
   return (
     <div className="p-6">
       <h1 className="text-xl font-bold text-gray-800 mb-2">Configuration système</h1>
       <p className="text-sm text-gray-500 mb-6">Paramètres globaux de la plateforme MMI</p>
+
+      {/* Raccourcis */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         {[
           { label:'Pièces requises par type', desc:'Documents obligatoires par type de demande', icon:FileText,  link:'/admin/pieces-requises', color:'text-blue-600',  bg:'bg-blue-50'  },
@@ -682,6 +704,53 @@ export function AdminConfig() {
           </div>
         ))}
       </div>
+
+      {/* Configuration Ministre — dynamique */}
+      <div className="card p-5 mb-5 border-l-4 border-amber-400">
+        <h3 className="font-bold text-gray-700 text-sm mb-1 flex items-center gap-2">
+          <Shield size={15} className="text-amber-500"/> Signataire officiel des autorisations
+        </h3>
+        <p className="text-xs text-gray-400 mb-4">
+          Le nom et titre ci-dessous apparaissent sur chaque autorisation PDF générée. À mettre à jour en cas de changement de ministre.
+        </p>
+        {loading ? (
+          <div className="space-y-3">{[1,2,3].map(i=><div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse"/>)}</div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="form-label text-xs">Nom complet du Ministre *</label>
+              <input className="form-input text-sm"
+                     placeholder="Ex: Dr. Abdessalam Ould Mohamed Saleh"
+                     value={config.ministre_nom}
+                     onChange={e=>setConfig(p=>({...p,ministre_nom:e.target.value}))}/>
+            </div>
+            <div>
+              <label className="form-label text-xs">Titre officiel *</label>
+              <input className="form-input text-sm"
+                     placeholder="Ex: Ministre des Mines et de l'Industrie"
+                     value={config.ministre_titre}
+                     onChange={e=>setConfig(p=>({...p,ministre_titre:e.target.value}))}/>
+            </div>
+            <div>
+              <label className="form-label text-xs">URL de vérification des documents</label>
+              <input className="form-input text-sm"
+                     placeholder="https://plateforme.mmi.gov.mr"
+                     value={config.plateforme_url}
+                     onChange={e=>setConfig(p=>({...p,plateforme_url:e.target.value}))}/>
+            </div>
+            <button onClick={handleSave} disabled={saving}
+                    className="btn-primary text-sm flex items-center gap-2">
+              {saving
+                ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+                : <CheckCircle size={15}/>
+              }
+              Enregistrer la configuration
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* SMTP */}
       <div className="card p-5 border-l-4 border-green-400">
         <h3 className="font-bold text-gray-700 text-sm mb-3 flex items-center gap-2">
           <Bell size={15} className="text-green-600"/> Configuration email active
