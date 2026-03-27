@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, LogIn, AlertCircle, UserPlus } from 'lucide-react'
 import { authAPI } from '@/utils/api'
@@ -6,6 +7,7 @@ import { useAuthStore } from '@/store/authStore'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
   const [form, setForm]       = useState({ identifiant_unique: '', password: '' })
@@ -45,7 +47,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex flex-col">
 
-      {/* ── HERO BANNER ───────────────────────────────────── */}
+       {/* ── HERO BANNER ───────────────────────────────────── */}
       <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
         <img
           src="/images/banner_mmi.jpg"

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { Calendar, ChevronRight, ChevronLeft, Search, FileText } from 'lucide-react'
 import { portailAPI } from '@/utils/api'
@@ -15,6 +16,7 @@ interface Actualite {
 }
 
 export default function ActualitesPage() {
+  const { t } = useTranslation()
   const [articles, setArticles] = useState<Actualite[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Mail, Phone, MapPin, Clock, Printer, Send, CheckCircle } from 'lucide-react'
 
 const SUJETS = [
@@ -10,6 +11,7 @@ const SUJETS = [
 ]
 
 export default function ContactPage() {
+  const { t } = useTranslation()
   const [form, setForm] = useState({
     nom: '', email: '', telephone: '', sujet: 'Suggestion', message: ''
   })
