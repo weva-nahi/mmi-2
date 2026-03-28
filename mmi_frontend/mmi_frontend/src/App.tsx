@@ -17,6 +17,7 @@ import RegisterPage   from '@/pages/auth/RegisterPage'
 import LoginAgentPage from '@/pages/auth/LoginAgentPage'
 import MotDePasseOubliePage  from '@/pages/auth/MotDePasseOubliePage'
 import ActivationPage        from '@/pages/auth/ActivationPage'
+import ResetPasswordPage     from '@/pages/auth/ResetPasswordPage' 
 import ChangePasswordPage    from '@/pages/auth/ChangePasswordPage'
 
 // Demandeur
@@ -97,6 +98,7 @@ export default function App() {
           <Route path="/actualites/:slug" element={<ArticleDetailPage />} />
           <Route path="/mot-de-passe-oublie" element={<MotDePasseOubliePage />} />
           <Route path="/activer-compte/:uidb64/:token" element={<ActivationPage />} />
+          <Route path="/reset-password/:uidb64/:token" element={<ResetPasswordPage />} />
           <Route path="/changer-mot-de-passe" element={<ChangePasswordPage />} />
 
           {/* ── Demandeur ── */}

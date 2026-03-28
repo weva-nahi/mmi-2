@@ -41,17 +41,13 @@ export default function FormulaireExtension() {
     if (!searchTerm.trim()) return
     setSearching(true)
     try {
-      const res = await autorisationsAPI.rechercher(searchTerm)
-      const autos = res.data.results || res.data
-      if (autos.length > 0) {
-        setAutoExistante(autos[0])
-        up('num_autorisation_ref', autos[0].numero_autorisation)
-        toast.success('Autorisation trouvée !')
-      } else {
-        toast.error('Aucune autorisation trouvée avec cette référence')
-      }
-    } catch {
-      toast.error('Erreur lors de la recherche')
+      const res = await autorisationsAPI.byNumeroPour(searchTerm.trim(), 'extension')
+      setAutoExistante(res.data)
+      up('num_autorisation_ref', res.data.numero_auto)
+      toast.success(res.data.message || 'Autorisation trouvée — extension éligible !')
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Aucune autorisation active trouvée avec ce numéro')
+      setAutoExistante(null)
     } finally {
       setSearching(false)
     }
@@ -62,13 +58,18 @@ export default function FormulaireExtension() {
     try {
       const { data: res } = await demandesAPI.create({
         type_demande_code:   'EXTENSION',
-        raison_sociale:       autoExistante?.raison_sociale || '',
+        raison_sociale:       autoExistante?.adresse || '',
         adresse:              autoExistante?.adresse || '',
         wilaya:               autoExistante?.wilaya || '',
-        activite:             autoExistante?.activite || '',
+        activite:             form.nature_extension || '',
         formulaire_specifique: form,
-        autorisation_ref_id:  autoExistante?.id,
       })
+      // Lier l'autorisation parente à la demande d'extension
+      if (autoExistante?.id || autoExistante?.numero_auto) {
+        try {
+          await demandesAPI.lierAutorisation(res.id, autoExistante.numero_auto)
+        } catch { /* non bloquant */ }
+      }
       for (const [key, file] of Object.entries(files)) {
         const fd = new FormData()
         fd.append('fichier', file)
@@ -151,7 +152,7 @@ export default function FormulaireExtension() {
                 <div className="flex items-start gap-3">
                   <CheckCircle size={20} className="text-mmi-green flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-bold text-mmi-green">{autoExistante.numero_autorisation}</p>
+                    <p className="font-bold text-mmi-green">{autoExistante.numero_auto}</p>
                     <p className="font-medium text-gray-800 mt-1">{autoExistante.raison_sociale}</p>
                     <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2 text-xs text-gray-600">
                       <span>Type : {autoExistante.type_auto}</span>

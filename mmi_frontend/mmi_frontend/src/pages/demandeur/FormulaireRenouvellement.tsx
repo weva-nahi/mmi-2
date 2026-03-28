@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, CheckCircle, AlertCircle, MapPin, Save } from 'lucide-react'
-import { demandesAPI } from '@/utils/api'
+import { ChevronLeft, ChevronRight, CheckCircle, AlertCircle, AlertTriangle, MapPin, Save, Search, Link } from 'lucide-react'
+import { demandesAPI, autorisationsAPI } from '@/utils/api'
 import toast from 'react-hot-toast'
 
 const SECTIONS = [
+  { id:0, label:'Autorisation à renouveler' },
   { id:1, label:'Identification' },
   { id:2, label:'Adresse & Contact' },
   { id:3, label:'Gestionnaire' },
@@ -16,10 +17,42 @@ const SECTIONS = [
 
 export default function FormulaireRenouvellement() {
   const navigate = useNavigate()
-  const [step, setStep]       = useState(1)
+
+  const searchAutorisation = async () => {
+    if (!autoNumero.trim()) return
+    setAutoSearching(true)
+    setAutoError('')
+    setAutoFound(null)
+    try {
+      const res = await autorisationsAPI.byNumeroPour(autoNumero.trim(), 'renouvellement')
+      setAutoFound(res.data)
+    } catch (err: any) {
+      setAutoError(err.response?.data?.detail || 'Autorisation introuvable')
+    } finally {
+      setAutoSearching(false)
+    }
+  }
+
+  const lierAutorisation = async () => {
+    if (!autoFound || !demandeId) return
+    try {
+      await demandesAPI.lierAutorisation(demandeId, autoFound.numero_auto)
+      setAutoLiee(true)
+      toast.success('Autorisation liée avec succès')
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Erreur lors du lien')
+    }
+  }
+  const [step, setStep]       = useState(0)
   const [saving, setSaving]   = useState(false)
   const [errors, setErrors]   = useState<string[]>([])
-  const [gpsLoading, setGpsLoading] = useState(false)
+  const [gpsLoading, setGpsLoading]       = useState(false)
+  const [autoNumero, setAutoNumero]       = useState('')
+  const [autoFound, setAutoFound]         = useState<any>(null)
+  const [autoSearching, setAutoSearching] = useState(false)
+  const [autoError, setAutoError]         = useState('')
+  const [autoLiee, setAutoLiee]           = useState(false)
+  const [demandeId, setDemandeId]         = useState<number | null>(null)
 
   const [form, setForm] = useState({
     // I. Identification
@@ -135,6 +168,12 @@ export default function FormulaireRenouvellement() {
         longitude:         form.longitude || null,
         formulaire_specifique: form,
       })
+      // Lier l'autorisation si trouvée
+      if (autoFound && res.id) {
+        try {
+          await demandesAPI.lierAutorisation(res.id, autoFound.numero_auto)
+        } catch { /* non bloquant */ }
+      }
       toast.success(`✅ Demande de renouvellement ${res.numero_ref} soumise !`)
       navigate('/demandeur/demandes')
     } catch (err: any) {
@@ -196,6 +235,91 @@ export default function FormulaireRenouvellement() {
       </div>
 
       <div className="card p-6">
+
+        {/* ══ STEP 0 — Autorisation à renouveler ══ */}
+        {step === 0 && (
+          <div className="space-y-5 animate-fadeInUp">
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <h3 className="font-bold text-blue-800 text-sm mb-1 flex items-center gap-2">
+                <Link size={15} /> Autorisation à renouveler
+              </h3>
+              <p className="text-xs text-blue-600">
+                Saisissez le numéro de votre autorisation expirée ou proche de l'expiration.
+                Ce numéro figure sur votre document officiel (format : AUTO-XXXX-...).
+              </p>
+            </div>
+
+            <div>
+              <label className="form-label">Numéro d'autorisation *</label>
+              <div className="flex gap-2">
+                <input className="form-input flex-1"
+                       placeholder="Ex: AUTO-2024-BP-12345"
+                       value={autoNumero}
+                       onChange={e => { setAutoNumero(e.target.value); setAutoFound(null); setAutoError('') }}
+                       onKeyDown={e => e.key === 'Enter' && searchAutorisation()} />
+                <button type="button" onClick={searchAutorisation}
+                        disabled={autoSearching || !autoNumero.trim()}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-xl font-medium text-sm
+                                   hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5">
+                  {autoSearching
+                    ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    : <Search size={15} />}
+                  Vérifier
+                </button>
+              </div>
+              {autoError && (
+                <p className="text-red-500 text-xs mt-1.5 flex items-center gap-1">
+                  <AlertCircle size={12} /> {autoError}
+                </p>
+              )}
+            </div>
+
+            {/* Résultat */}
+            {autoFound && (
+              <div className={`rounded-xl p-4 border ${
+                autoLiee          ? 'bg-green-50 border-green-300'
+                : (autoFound.est_expiree || (autoFound.jours_restants <= 90 && autoFound.jours_restants >= 0))
+                                  ? 'bg-amber-50 border-amber-300'
+                                  : 'bg-red-50 border-red-300'
+              }`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-800 text-sm flex items-center gap-2 mb-1">
+                      {autoLiee && <CheckCircle size={14} className="text-green-600" />}
+                      {autoFound.numero_auto}
+                      {autoFound.est_expiree && (
+                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Expirée</span>
+                      )}
+                    </p>
+                    <p className={`text-xs mb-2 font-medium ${
+                      autoFound.peut_renouveler ? 'text-green-700' : 'text-red-600'
+                    }`}>
+                      {autoFound.message}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                      <div><span className="text-gray-400">Type : </span>{autoFound.type}</div>
+                      <div><span className="text-gray-400">Wilaya : </span>{autoFound.wilaya || '—'}</div>
+                      <div><span className="text-gray-400">Délivrance : </span>{autoFound.date_delivrance}</div>
+                      <div><span className="text-gray-400">Expiration : </span>{autoFound.date_expiration}</div>
+                    </div>
+                  </div>
+                  {autoLiee && <span className="text-green-600 text-xs font-bold">Liée ✓</span>}
+                  {!autoFound.peut_renouveler && !autoLiee && (
+                    <span className="text-red-500 text-xs font-bold">Non éligible</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Note */}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <p className="text-xs text-gray-600">
+                <strong>Je n'ai pas mon numéro ?</strong> Vous pouvez continuer sans.
+                Un agent MMI fera le rapprochement lors du traitement.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ── I. Identification ── */}
         {step === 1 && (

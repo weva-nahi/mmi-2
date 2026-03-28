@@ -82,6 +82,8 @@ export const demandesAPI = {
                    headers: { 'Content-Type': 'multipart/form-data' },
                  }),
   imprimer: (id: number) => api.get(`/demandes/${id}/imprimer/`),
+  lierAutorisation: (id: number, numero: string) =>
+                 api.post(`/demandes/${id}/lier-autorisation/`, { numero_autorisation: numero }),
   quittanceRecue: (id: number, commentaire?: string) =>
                  api.post(`/demandes/${id}/transmettre/`, {
                    etape_code: 'QUITTANCE_RECUE',
@@ -106,6 +108,9 @@ export const piecesRequisesAPI = {
 
 // ── Autorisations (carte publique) ────────────────────────────
 export const autorisationsAPI = {
+  byNumero:          (numero: string) => api.get('/autorisations/by-numero/', { params: { numero } }),
+  byNumeroPour:      (numero: string, pour: 'renouvellement' | 'extension') =>
+                       api.get('/autorisations/by-numero/', { params: { numero, pour } }),
   list:       (params?: object) => api.get('/autorisations/', { params }),
   get:        (id: number)      => api.get(`/autorisations/${id}/`),
   geojson:    ()                => api.get('/autorisations/geojson/'),
