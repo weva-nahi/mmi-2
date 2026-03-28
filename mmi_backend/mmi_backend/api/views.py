@@ -9,10 +9,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from django.utils.encoding import force_str, force_bytes
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
+from django.utils.encoding import force_str, force_bytes
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.contrib.auth.tokens import default_token_generator
 import logging
 
 from .models import (
@@ -559,19 +559,31 @@ class DemandeViewSet(viewsets.ModelViewSet):
         annee = date.today().year
         numero = f"AUTO-{annee}-{demande.type_demande.code}-{demande.id:04d}"
 
-        # Durée selon type
-        # BP, USINE_EAU, UNITE → renouvelables tous les 6 mois
-        # RENOUVELLEMENT → 6 mois également
-        # EXTENSION → pas de date d'expiration propre (rattachée à l'autorisation d'origine)
-        DUREES = {
-            'BP':             182,   # 6 mois
-            'USINE_EAU':      182,   # 6 mois
-            'UNITE':          182,   # 6 mois
-            'RENOUVELLEMENT': 182,   # 6 mois
-            'EXTENSION':      None,  # pas de période — rattachée à l'autorisation existante
-        }
-        duree = DUREES.get(demande.type_demande.code, 182)
-        date_exp = (date.today() + timedelta(days=duree)) if duree else None
+        # Durée fixe : 6 mois (182 jours) pour tous les types
+        # Pour un RENOUVELLEMENT : la nouvelle expiration part de l'ancienne date d'expiration
+        # (pas d'aujourd'hui, pour ne pas pénaliser ceux qui renouvellent en avance)
+        DUREE_JOURS = 182  # 6 mois
+
+        if demande.type_demande.code == 'RENOUVELLEMENT' and demande.autorisation_parent:
+            # Renouvellement : date_exp = ancienne_exp + 6 mois
+            ancienne_exp = demande.autorisation_parent.date_expiration
+            base = ancienne_exp if ancienne_exp and ancienne_exp > date.today() else date.today()
+            date_exp = base + timedelta(days=DUREE_JOURS)
+            # Marquer l'ancienne autorisation comme expirée/renouvelée
+            demande.autorisation_parent.statut = 'expiree'
+            demande.autorisation_parent.save()
+
+        elif demande.type_demande.code == 'EXTENSION' and demande.autorisation_parent:
+            # Extension : hérite de la date d'expiration de l'autorisation d'origine
+            date_exp = demande.autorisation_parent.date_expiration
+
+        elif demande.type_demande.code == 'EXTENSION':
+            # Extension sans autorisation parente — pas de date propre
+            date_exp = None
+
+        else:
+            # BP, USINE_EAU, UNITE : 6 mois à partir d'aujourd'hui
+            date_exp = date.today() + timedelta(days=DUREE_JOURS)
 
         # Créer ou récupérer l'autorisation
         auto, created = Autorisation.objects.get_or_create(
@@ -1942,3 +1954,125 @@ class ContactView(generics.GenericAPIView):
             logger.warning(f'Email contact échoué: {exc}')
 
         return Response({'detail': 'Message envoyé avec succès.'})
+
+
+class AutorisationByNumeroView(generics.GenericAPIView):
+    """GET /api/autorisations/by-numero/?numero=AUTO-XXX&pour=renouvellement|extension — chercher une autorisation."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import date as d
+        numero = request.query_params.get('numero', '').strip()
+        pour   = request.query_params.get('pour', 'extension')  # renouvellement ou extension
+
+        if not numero:
+            return Response({'detail': 'Paramètre numero requis.'}, status=400)
+
+        try:
+            auto = Autorisation.objects.get(numero_auto=numero)
+        except Autorisation.DoesNotExist:
+            return Response({'detail': f'Aucune autorisation trouvée avec le numéro « {numero} ».'}, status=404)
+
+        today = d.today()
+        est_expiree = auto.date_expiration and auto.date_expiration < today
+
+        # Pour un RENOUVELLEMENT : l'autorisation doit être expirée OU proche de l'expiration (≤ 90 jours)
+        if pour == 'renouvellement':
+            if auto.statut == 'revoquee':
+                return Response({'detail': 'Cette autorisation a été révoquée et ne peut pas être renouvelée.'}, status=400)
+            if not auto.date_expiration:
+                return Response({'detail': 'Cette autorisation est permanente et ne nécessite pas de renouvellement.'}, status=400)
+
+            jours_restants = (auto.date_expiration - today).days if not est_expiree else 0
+
+            return Response({
+                'id':              auto.id,
+                'numero_auto':     auto.numero_auto,
+                'type':            auto.type,
+                'wilaya':          auto.wilaya,
+                'adresse':         auto.adresse,
+                'date_delivrance': str(auto.date_delivrance),
+                'date_expiration': str(auto.date_expiration),
+                'statut':          auto.statut,
+                'est_expiree':     est_expiree,
+                'jours_restants':  jours_restants if not est_expiree else 0,
+                'peut_renouveler': est_expiree or jours_restants <= 90,
+                'message':         (
+                    'Autorisation expirée — renouvellement éligible.' if est_expiree
+                    else f'Expire dans {jours_restants} jour(s) — renouvellement possible.'
+                    if jours_restants <= 90
+                    else f'Autorisation encore valide ({jours_restants} jours). Renouvellement possible à 90 jours de l\'expiration.'
+                ),
+            })
+
+        # Pour une EXTENSION : l'autorisation doit être active
+        else:
+            if auto.statut != 'active':
+                return Response({'detail': f'Cette autorisation est « {auto.statut} » et ne peut pas être étendue.'}, status=400)
+            if est_expiree:
+                return Response({'detail': 'Cette autorisation est expirée. Faites d\'abord un renouvellement.'}, status=400)
+
+            return Response({
+                'id':              auto.id,
+                'numero_auto':     auto.numero_auto,
+                'type':            auto.type,
+                'wilaya':          auto.wilaya,
+                'adresse':         auto.adresse,
+                'date_delivrance': str(auto.date_delivrance),
+                'date_expiration': str(auto.date_expiration) if auto.date_expiration else None,
+                'statut':          auto.statut,
+                'peut_etendre':    True,
+                'message':         'Autorisation active — extension éligible.',
+            })
+
+
+class LierAutorisationRenouvellementView(generics.GenericAPIView):
+    """POST /api/demandes/{id}/lier-autorisation/ — lie une autorisation à un renouvellement."""
+    permission_classes = [IsDemandeur]
+
+    def post(self, request, pk):
+        from api.models import Autorisation as Auto
+        try:
+            demande = Demande.objects.get(pk=pk, demandeur=request.user)
+        except Demande.DoesNotExist:
+            return Response({'detail': 'Demande introuvable.'}, status=404)
+
+        if demande.type_demande.code not in ('RENOUVELLEMENT', 'EXTENSION'):
+            return Response({'detail': 'Cette action est réservée aux renouvellements et extensions.'}, status=400)
+
+        numero = request.data.get('numero_autorisation', '').strip()
+        if not numero:
+            return Response({'detail': 'Numéro d\'autorisation requis.'}, status=400)
+
+        try:
+            auto = Auto.objects.get(numero_auto=numero)
+        except Auto.DoesNotExist:
+            return Response({'detail': f'Autorisation {numero} introuvable.'}, status=404)
+
+        # Lier à la demande
+        demande.autorisation_parent = auto
+        demande.save()
+
+        # Lier au RenouvellementDetail si existe
+        if hasattr(demande, 'renouvellement_detail'):
+            rd = demande.renouvellement_detail
+            rd.autorisation_origine = auto
+            rd.numero_autorisation_original = numero
+            rd.save()
+
+        # Lier à l'ExtensionDetail si existe
+        if hasattr(demande, 'extension_detail'):
+            ed = demande.extension_detail
+            ed.autorisation_origine = auto
+            ed.numero_autorisation_original = numero
+            ed.save()
+
+        return Response({
+            'message': f'Autorisation {numero} liée à la demande {demande.numero_ref}.',
+            'autorisation': {
+                'id': auto.id,
+                'numero_auto': auto.numero_auto,
+                'type': auto.type,
+                'date_delivrance': str(auto.date_delivrance),
+            }
+        })

@@ -293,10 +293,22 @@ class DemandeDetailSerializer(serializers.ModelSerializer):
     type_demande_id = serializers.PrimaryKeyRelatedField(
         queryset=TypeDemande.objects.all(), source='type_demande', write_only=True
     )
-    demandeur       = UserListSerializer(read_only=True)
-    pieces_jointes  = PieceJointeSerializer(many=True, read_only=True)
-    etapes          = EtapeTraitementSerializer(many=True, read_only=True)
-    autorisation    = serializers.SerializerMethodField()
+    demandeur         = UserListSerializer(read_only=True)
+    demandeur_nom     = serializers.SerializerMethodField()
+    demandeur_email   = serializers.SerializerMethodField()
+    demandeur_identifiant = serializers.SerializerMethodField()
+    pieces_jointes    = PieceJointeSerializer(many=True, read_only=True)
+    etapes            = EtapeTraitementSerializer(many=True, read_only=True)
+    autorisation      = serializers.SerializerMethodField()
+
+    def get_demandeur_nom(self, obj):
+        return obj.demandeur.nom_complet if obj.demandeur else ''
+
+    def get_demandeur_email(self, obj):
+        return obj.demandeur.email if obj.demandeur else ''
+
+    def get_demandeur_identifiant(self, obj):
+        return obj.demandeur.identifiant_unique if obj.demandeur else ''
 
     class Meta:
         model  = Demande
@@ -305,8 +317,8 @@ class DemandeDetailSerializer(serializers.ModelSerializer):
             'raison_sociale', 'activite', 'adresse', 'wilaya',
             'latitude', 'longitude',
             'type_demande', 'type_demande_id',
-            'demandeur', 'gestionnaire',
-            'autorisation_parent',
+            'demandeur', 'demandeur_nom', 'demandeur_email', 'demandeur_identifiant',
+            'gestionnaire', 'autorisation_parent',
             'pieces_jointes', 'etapes', 'autorisation',
             'date_soumission', 'date_maj',
         ]
