@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { BarChart3, ChevronRight, Calendar, ArrowRight, FileText, Scale, Briefcase } from 'lucide-react'
 import { portailAPI, autorisationsAPI } from '@/utils/api'
-import HeroBanner from '@/components/ui/HeroBanner'
 import L from 'leaflet'
 
 const createIcon = (color: string) => L.divIcon({
@@ -35,67 +34,64 @@ interface Stats { total: number; par_type: { type: string; count: number }[] }
 
 type FiltreType = 'tous' | 'usines' | 'boulangeries'
 
-// ── Composant overlay anti-scroll ────────────────────────────
-// Affiche un overlay semi-transparent qui capture le scroll.
-// Au clic, l'overlay disparaît et la carte devient interactive.
-// Au blur (clic ailleurs), l'overlay réapparaît.
-function MapScrollGuard() {
-  const [active, setActive] = useState(false)
+// ── Composant qui gère UNIQUEMENT le scroll molette ───────────
+// La carte est TOUJOURS interactive (drag, zoom +/−, double-clic).
+// Seul le scroll molette est désactivé par défaut pour ne pas
+// capturer le scroll de la page. Un clic sur la carte l'active.
+function ScrollWheelGuard() {
+  const map = useMap()
+  const [wheelActive, setWheelActive] = useState(false)
 
-  if (active) {
-    return (
-      <div
-        style={{
-          position: 'absolute', inset: 0, zIndex: 1000,
-          cursor: 'default', background: 'transparent',
-        }}
-        onClick={() => setActive(false)}
-        onMouseLeave={() => setActive(false)}
-      />
-    )
-  }
+  useEffect(() => {
+    // Désactiver scroll molette au démarrage
+    map.scrollWheelZoom.disable()
+
+    const container = map.getContainer()
+
+    const onContainerClick = () => {
+      map.scrollWheelZoom.enable()
+      setWheelActive(true)
+    }
+
+    const onDocClick = (e: MouseEvent) => {
+      if (!container.contains(e.target as Node)) {
+        map.scrollWheelZoom.disable()
+        setWheelActive(false)
+      }
+    }
+
+    container.addEventListener('click', onContainerClick)
+    document.addEventListener('click', onDocClick)
+
+    return () => {
+      container.removeEventListener('click', onContainerClick)
+      document.removeEventListener('click', onDocClick)
+    }
+  }, [map])
+
+  // Indicateur visuel discret quand scroll molette inactif
+  if (wheelActive) return null
 
   return (
     <div
       style={{
-        position: 'absolute', inset: 0, zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0)',
-        cursor: 'pointer',
-        transition: 'background 0.2s',
-      }}
-      onClick={() => setActive(true)}
-      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(0,0,0,0.04)' }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'rgba(0,0,0,0)' }}
-    >
-      <div style={{
-        background: 'rgba(27,107,48,0.85)',
+        position: 'absolute',
+        bottom: 8,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 500,
+        background: 'rgba(0,0,0,0.55)',
         color: 'white',
-        padding: '6px 14px',
+        fontSize: 11,
+        padding: '3px 10px',
         borderRadius: 20,
-        fontSize: 12,
-        fontWeight: 600,
         pointerEvents: 'none',
-        opacity: 0,
-        transition: 'opacity 0.2s',
+        whiteSpace: 'nowrap',
       }}
-        className="map-click-hint"
-      >
-        Cliquer pour interagir
-      </div>
+    >
+      Cliquer pour activer le zoom molette
     </div>
   )
-}
-
-
-// Composant qui désactive TOUS les comportements de scroll/touch de Leaflet
-function ScrollFix() {
-  const map = useMap()
-  map.scrollWheelZoom.disable()
-  map.touchZoom.disable()
-  map.doubleClickZoom.disable()
-  map.keyboard.disable()
-  return null
 }
 
 export default function HomePage() {
@@ -128,7 +124,6 @@ export default function HomePage() {
   const boulangeries = stats?.par_type.find(p => p.type === 'BP')?.count ?? 0
   const total        = stats?.total ?? 0
 
-  // Filtrage des marqueurs selon le bouton actif
   const featuresFiltrees = features.filter(f => {
     if (filtreType === 'tous') return true
     if (filtreType === 'boulangeries') return f.properties.type === 'BP'
@@ -138,8 +133,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-50">
 
-      {/* ── HERO BANNER ─────────────────────────────────── */}
-           {/* ── HERO BANNER ───────────────────────────────────── */}
+      {/* ── HERO BANNER ───────────────────────────────────── */}
       <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
         <img
           src="/images/banner_mmi.jpg"
@@ -249,22 +243,27 @@ export default function HomePage() {
 
           {/* Carte */}
           <div className="lg:col-span-3 space-y-2">
-            {/* Wrapper relatif pour l'overlay anti-scroll */}
-            <div style={{ position: 'relative', height: 450, borderRadius: 12, overflow: 'hidden', border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <div style={{
+              position: 'relative', height: 450, borderRadius: 12,
+              overflow: 'hidden', border: '1px solid #e5e7eb',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+            }}>
               <MapContainer
                 center={[20.5, -10.5]}
                 zoom={5}
                 style={{ height: '100%', width: '100%' }}
                 scrollWheelZoom={false}
-                touchZoom={false}
+                touchZoom={true}
                 doubleClickZoom={true}
                 dragging={true}
                 zoomControl={true}
+                keyboard={true}
               >
                 <TileLayer
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                   attribution='© <a href="https://openstreetmap.org">OpenStreetMap</a>'
                 />
+                <ScrollWheelGuard />
                 {featuresFiltrees.map(f => (
                   <Marker
                     key={f.properties.id}
@@ -281,16 +280,13 @@ export default function HomePage() {
                   </Marker>
                 ))}
               </MapContainer>
-              {/* Overlay transparent — bloque le scroll molette sur la carte
-                  L'utilisateur clique une fois pour activer le drag, sinon il scrolle normalement */}
-              <MapScrollGuard />
             </div>
             <p className="text-xs text-gray-400 text-center">
-              Cliquez sur la carte pour l'activer, puis naviguez avec les boutons <strong>+</strong> / <strong>−</strong>
+              Glissez pour naviguer · Boutons <strong>+</strong> / <strong>−</strong> pour zoomer · Cliquez sur la carte pour activer le zoom molette
             </p>
           </div>
 
-          {/* Panel statistiques — filtres cliquables */}
+          {/* Panel statistiques */}
           <div className="lg:col-span-1">
             <div className="card p-5">
               <div className="flex items-center gap-2 font-semibold text-gray-800 mb-4 pb-3 border-b border-gray-100">
@@ -299,8 +295,6 @@ export default function HomePage() {
               </div>
 
               <div className="space-y-3">
-
-                {/* Bouton TOTAL */}
                 <button
                   onClick={() => setFiltreType('tous')}
                   className={`w-full p-3 rounded-lg border text-left transition-all cursor-pointer
@@ -318,7 +312,6 @@ export default function HomePage() {
                   <p className="text-2xl font-bold text-mmi-green">{total.toLocaleString()}</p>
                 </button>
 
-                {/* Bouton USINES */}
                 <button
                   onClick={() => setFiltreType('usines')}
                   className={`w-full p-3 rounded-lg border text-left transition-all cursor-pointer
@@ -336,7 +329,6 @@ export default function HomePage() {
                   <p className="text-xl font-bold text-gray-800">{usines}</p>
                 </button>
 
-                {/* Bouton BOULANGERIES */}
                 <button
                   onClick={() => setFiltreType('boulangeries')}
                   className={`w-full p-3 rounded-lg border text-left transition-all cursor-pointer
@@ -354,11 +346,9 @@ export default function HomePage() {
                   <p className="text-xl font-bold text-gray-800">{boulangeries}</p>
                 </button>
 
-                {/* Compteur marqueurs affichés */}
                 <div className="pt-2 border-t border-gray-100 text-center text-xs text-gray-400">
                   {featuresFiltrees.length} marqueur(s) affiché(s)
                 </div>
-
               </div>
             </div>
           </div>
@@ -399,7 +389,6 @@ function DocumentSection({ categorie }: { categorie: 'JURIDIQUE' | 'PROJET' | 'A
     </div>
   )
 
-  // Affichage projets
   if (categorie === 'PROJET') return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {items.map((p: any) => (
@@ -441,7 +430,6 @@ function DocumentSection({ categorie }: { categorie: 'JURIDIQUE' | 'PROJET' | 'A
     </div>
   )
 
-  // Affichage documents (Juridique / Annexe)
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {items.map((doc: any) => (
