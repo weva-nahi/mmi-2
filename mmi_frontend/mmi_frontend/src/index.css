@@ -131,3 +131,30 @@ html[dir="rtl"] body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #f1f1f1; }
 ::-webkit-scrollbar-thumb { background: var(--mmi-green); border-radius: 3px; }
+
+/* ── Leaflet z-index fix ───────────────────────────────────── */
+/* La carte ne doit JAMAIS passer au-dessus du header (z-50 = 50) */
+.leaflet-container {
+  touch-action: none !important;
+  -ms-touch-action: none !important;
+  z-index: 1 !important;
+}
+.leaflet-container a {
+  touch-action: none;
+}
+/* Tous les éléments Leaflet restent sous le header */
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 1 !important;
+}
+.leaflet-control {
+  z-index: 2 !important;
+}
+.leaflet-popup {
+  z-index: 3 !important;
+}
+/* Le header reste toujours au-dessus */
+.navbar-mmi {
+  z-index: 9999 !important;
+}

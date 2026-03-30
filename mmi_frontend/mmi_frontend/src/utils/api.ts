@@ -177,6 +177,8 @@ export const adminAPI = {
   deleteDocument:   (id: number) => api.delete(`/admin/documents/${id}/`),
   // Configuration plateforme
   getConfig:  ()             => api.get('/admin/config-plateforme/'),
+  suspendUser: (id: number)  => api.delete(`/admin/users/${id}/`),
+  deleteUser:  (id: number)  => api.delete(`/admin/users/${id}/?mode=delete`),
   backup:     ()             => `${api.defaults.baseURL}/admin/backup/`,
   saveConfig: (data: object) => api.post('/admin/config-plateforme/', data),
 }

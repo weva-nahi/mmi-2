@@ -193,6 +193,37 @@ export function AdminUsers() {
     }
   }
 
+  const handleDeleteUser = async (u: any) => {
+    // Demander d'abord la confirmation avec choix clair
+    const choix = window.confirm(
+      `Que voulez-vous faire avec « ${u.nom_complet} » ?\n\n` +
+      `OK     → Suspendre le compte (désactiver, données conservées)\n` +
+      `Annuler → Ne rien faire`
+    )
+    if (!choix) return
+
+    // Si suspendu → proposer suppression définitive
+    const definitif = window.confirm(
+      `Voulez-vous SUPPRIMER DÉFINITIVEMENT ce compte ?\n\n` +
+      `⚠️ Cette action est irréversible — toutes les données seront perdues.\n\n` +
+      `OK     → Suppression définitive\n` +
+      `Annuler → Suspension simple (recommandé)`
+    )
+
+    try {
+      if (definitif) {
+        await adminAPI.deleteUser(u.id)
+        toast.success(`Compte de « ${u.nom_complet} » supprimé définitivement`)
+      } else {
+        await adminAPI.suspendUser(u.id)
+        toast.success(`Compte de « ${u.nom_complet} » suspendu`)
+      }
+      load()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Erreur')
+    }
+  }
+
   const toggleActive = async (u: any) => {
     try {
       await adminAPI.activerUser(u.id)
@@ -439,6 +470,41 @@ export function AdminUsers() {
                                           : 'bg-green-50 text-green-500 hover:bg-green-100'}`}>
                                 {u.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
                               </button>
+                            )}
+                            {/* Actions — pas pour super admin ni soi-même */}
+                            {!isSuperAdmin && (
+                              <>
+                                {/* Suspendre / Réactiver */}
+                                <button
+                                  onClick={() => toggleActive(u)}
+                                  title={u.is_active ? 'Suspendre le compte' : 'Réactiver le compte'}
+                                  className={`p-1.5 rounded-lg transition-colors ${
+                                    u.is_active
+                                      ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
+                                      : 'bg-green-50 text-green-600 hover:bg-green-100'
+                                  }`}>
+                                  {u.is_active
+                                    ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 9v6m4-6v6"/><circle cx="12" cy="12" r="10"/></svg>
+                                    : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5,3 19,12 5,21"/></svg>
+                                  }
+                                </button>
+                                {/* Supprimer définitivement */}
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`⚠️ SUPPRESSION DÉFINITIVE\n\nCela effacera le compte de « ${u.nom_complet} » et toutes ses données.\n\nCette action est irréversible. Confirmer ?`)) return
+                                    try {
+                                      await adminAPI.deleteUser(u.id)
+                                      toast.success(`Compte supprimé définitivement`)
+                                      load()
+                                    } catch (err: any) {
+                                      toast.error(err.response?.data?.detail || 'Erreur')
+                                    }
+                                  }}
+                                  title="Supprimer définitivement"
+                                  className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
