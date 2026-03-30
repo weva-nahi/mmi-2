@@ -21,6 +21,15 @@ from .views import (
     AnalyticsView,
     PieceRequiseViewSet,
 )
+from api.views import (
+    DGIAnalyticsView, ExportView,
+    AdminActualiteView, AdminActualiteDetailView,
+    AdminDocumentView, AdminStatsView, AdminUserDetailView,
+    ActivationCompteView, ConfigPlateformeView,
+    ResetPasswordConfirmView, BackupDatabaseView,
+    AutorisationByNumeroView, LierAutorisationRenouvellementView,
+    ContactView,
+)
 
 router = DefaultRouter()
 
@@ -34,10 +43,10 @@ router.register(r'public/documents',    DocumentPublicViewSet, basename='documen
 router.register(r'public/projets',      ProjetBanqueViewSet,   basename='projet-banque')
 
 # Demandes
-router.register(r'types-demande',  TypeDemandeViewSet,   basename='type-demande')
+router.register(r'types-demande',   TypeDemandeViewSet,   basename='type-demande')
 router.register(r'pieces-requises', PieceRequiseViewSet,  basename='piece-requise')
-router.register(r'demandes',       DemandeViewSet,        basename='demande')
-router.register(r'notifications',  NotificationViewSet,   basename='notification')
+router.register(r'demandes',        DemandeViewSet,        basename='demande')
+router.register(r'notifications',   NotificationViewSet,   basename='notification')
 
 # Autorisations & documents
 router.register(r'autorisations',  AutorisationViewSet,   basename='autorisation')
@@ -52,40 +61,40 @@ router.register(r'details/extension',        ExtensionDetailViewSet,          ba
 router.register(r'details/usine-eau',        UsineEauDetailViewSet,           basename='detail-usine-eau')
 router.register(r'details/unite',            UniteIndustrielleDetailViewSet,  basename='detail-unite')
 
-from api.views import DGIAnalyticsView, ExportView, AdminActualiteView, AdminActualiteDetailView, AdminDocumentView, AdminStatsView, AdminUserDetailView, ActivationCompteView, ConfigPlateformeView, ResetPasswordConfirmView, BackupDatabaseView, ImprimerDossierView, QuittanceBPView, PVComiteBPView, QuittancePaiementView, PVComiteBPView, ImprimerDossierView
-
 urlpatterns = [
-    # Authentification
-    path('auth/login/agent/', LoginAgentView.as_view(), name='auth-login-agent'),
-    path('auth/activer/<str:uidb64>/<str:token>/', ActivationCompteView.as_view(), name='activer-compte'),
-    path('auth/password-change/', PasswordChangeView.as_view(), name='password-change'),
-    path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password-reset'),
-    path('auth/reset-password-confirm/', ResetPasswordConfirmView.as_view(), name='reset-password-confirm'),
+    # ── Authentification ──────────────────────────────────────
+    path('auth/login/',                       LoginView.as_view(),              name='auth-login'),
+    path('auth/login/agent/',                 LoginAgentView.as_view(),         name='auth-login-agent'),
+    path('auth/register/',                    InscriptionView.as_view(),        name='auth-register'),
+    path('auth/token/refresh/',               TokenRefreshView.as_view(),       name='token-refresh'),
+    path('auth/password-change/',             PasswordChangeView.as_view(),     name='password-change'),
+    path('auth/password-reset/',              PasswordResetRequestView.as_view(), name='password-reset'),
+    path('auth/reset-password-confirm/',      ResetPasswordConfirmView.as_view(), name='reset-password-confirm'),
     path('auth/reset-password/<str:uidb64>/<str:token>/', ResetPasswordConfirmView.as_view(), name='reset-password-link'),
-    path('auth/login/',           LoginView.as_view(),        name='auth-login'),
-    path('auth/register/',        InscriptionView.as_view(),  name='auth-register'),
-    path('auth/token/refresh/',   TokenRefreshView.as_view(), name='token-refresh'),
+    path('auth/activer/<str:uidb64>/<str:token>/',        ActivationCompteView.as_view(), name='activer-compte'),
 
-    # Analytics
-    path('analytics/dashboard/', AnalyticsView.as_view(),    name='analytics-dashboard'),
-    path('analytics/dgi/',       DGIAnalyticsView.as_view(), name='analytics-dgi'),
-    path('admin/stats/',             AdminStatsView.as_view(),          name='admin-stats'),
-    path('admin/actualites/',        AdminActualiteView.as_view(),       name='admin-actualites'),
-    path('admin/actualites/<int:pk>/',AdminActualiteDetailView.as_view(),name='admin-actualite-detail'),
-    path('admin/documents/',         AdminDocumentView.as_view(),        name='admin-documents'),
-    path('admin/documents/<int:pk>/',AdminDocumentView.as_view(),        name='admin-document-detail'),
-    path('admin/users/<int:pk>/',    AdminUserDetailView.as_view(),      name='admin-user-detail'),
-    path('export/renouvellements/', ExportView.as_view(),    name='export-renouvellements'),
-    # Impression DGI + circuit BP
-    path('demandes/<int:pk>/imprimer/',      ImprimerDossierView.as_view(), name='demande-imprimer'),
-    path('demandes/<int:pk>/pv-comite-bp/',  PVComiteBPView.as_view(),      name='pv-comite-bp'),
-    path('demandes/<int:pk>/quittance-bp/',  QuittanceBPView.as_view(),     name='quittance-bp'),
-    path('admin/config-plateforme/', ConfigPlateformeView.as_view(), name='config-plateforme'),
-    path('admin/backup/',             BackupDatabaseView.as_view(),   name='admin-backup'),
-    path('demandes/<int:pk>/quittance/',   QuittancePaiementView.as_view(), name='quittance-paiement'),
-    path('demandes/<int:pk>/pv-comite/',   PVComiteBPView.as_view(),       name='pv-comite-bp'),
-    path('demandes/<int:pk>/imprimer/',    ImprimerDossierView.as_view(),  name='imprimer-dossier'),
+    # ── Analytics & export ────────────────────────────────────
+    path('analytics/dashboard/',              AnalyticsView.as_view(),          name='analytics-dashboard'),
+    path('analytics/dgi/',                    DGIAnalyticsView.as_view(),       name='analytics-dgi'),
+    path('export/renouvellements/',           ExportView.as_view(),             name='export-renouvellements'),
 
-    # Tous les ViewSets
+    # ── Administration ────────────────────────────────────────
+    path('admin/stats/',                      AdminStatsView.as_view(),          name='admin-stats'),
+    path('admin/actualites/',                 AdminActualiteView.as_view(),      name='admin-actualites'),
+    path('admin/actualites/<int:pk>/',        AdminActualiteDetailView.as_view(),name='admin-actualite-detail'),
+    path('admin/documents/',                  AdminDocumentView.as_view(),       name='admin-documents'),
+    path('admin/documents/<int:pk>/',         AdminDocumentView.as_view(),       name='admin-document-detail'),
+    path('admin/users/<int:pk>/',             AdminUserDetailView.as_view(),     name='admin-user-detail'),
+    path('admin/config-plateforme/',          ConfigPlateformeView.as_view(),    name='config-plateforme'),
+    path('admin/backup/',                     BackupDatabaseView.as_view(),      name='admin-backup'),
+
+    # ── Actions spéciales sur demandes ────────────────────────
+    path('autorisations/by-numero/',          AutorisationByNumeroView.as_view(),               name='autorisation-by-numero'),
+    path('demandes/<int:pk>/lier-autorisation/', LierAutorisationRenouvellementView.as_view(),  name='lier-autorisation'),
+
+    # ── Portail public contact ────────────────────────────────
+    path('contact/',                          ContactView.as_view(),             name='contact'),
+
+    # ── ViewSets (router) ─────────────────────────────────────
     path('', include(router.urls)),
 ]

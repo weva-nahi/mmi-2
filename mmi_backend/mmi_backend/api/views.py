@@ -99,20 +99,29 @@ class UserViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='attribuer-role')
     def attribuer_role(self, request, pk=None):
-        """POST /api/admin/users/{id}/attribuer-role/ — attribuer un rôle."""
+        """POST /api/admin/users/{id}/attribuer-role/ — attribuer un rôle (remplace tous les anciens)."""
         user = self.get_object()
         role_code = request.data.get('role_code')
+        if not role_code:
+            return Response({'error': 'role_code requis.'}, status=400)
         try:
             role = Role.objects.get(code=role_code)
         except Role.DoesNotExist:
-            return Response({'error': 'Rôle introuvable.'}, status=400)
-        ur, created = UserRole.objects.get_or_create(
+            return Response({'error': f'Rôle {role_code} introuvable.'}, status=400)
+
+        # Supprimer TOUS les anciens rôles de l'utilisateur
+        UserRole.objects.filter(user=user).delete()
+
+        # Créer le nouveau rôle unique
+        UserRole.objects.create(
             user=user, role=role,
-            defaults={'assigned_by': request.user, 'actif': True}
+            actif=True, assigned_by=request.user
         )
-        if not created:
-            ur.actif = True; ur.save()
-        return Response({'message': f"Rôle {role_code} attribué à {user.nom_complet}."})
+        logger.info(f"Rôle de {user.email} changé → {role_code} par {request.user.email}")
+        return Response({
+            'message': f'Rôle de {user.nom_complet} changé en {role.nom}.',
+            'role': role_code,
+        })
 
     @action(detail=True, methods=['post'], url_path='activer')
     def activer(self, request, pk=None):
@@ -1260,7 +1269,7 @@ class ExportView(generics.GenericAPIView):
     GET /api/export/renouvellements/?format=csv|excel
     Export CSV ou Excel des données de renouvellement pour le DGI.
     """
-    permission_classes = [IsAgentInstitutionnel]
+    permission_classes = [IsAuthenticated]  # Ouvert à tous les agents authentifiés
 
     def get(self, request):
         import csv
@@ -1404,7 +1413,14 @@ class ExportView(generics.GenericAPIView):
                 response['Content-Disposition'] = 'attachment; filename="renouvellements_mmi.xlsx"'
                 return response
             except ImportError:
-                return Response({'detail': 'openpyxl non installé. Utilisez format=csv'}, status=501)
+                # openpyxl manquant — installer automatiquement
+                import subprocess, sys
+                try:
+                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'openpyxl'], 
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return Response({'detail': 'openpyxl installé. Relancez l\'export.'}, status=503)
+                except Exception:
+                    return Response({'detail': 'openpyxl non disponible. Utilisez format=csv'}, status=501)
 
         return Response({'detail': 'Format invalide. Utilisez format=csv ou format=excel'}, status=400)
 
@@ -1586,23 +1602,49 @@ class AdminUserDetailView(generics.GenericAPIView):
             from api.models import Role, UserRole
             try:
                 role = Role.objects.get(code=request.data['role_code'])
-                UserRole.objects.filter(user=user).update(actif=False)
-                UserRole.objects.get_or_create(user=user, role=role, defaults={'actif': True, 'assigned_by': request.user})
+                ancien_roles = list(UserRole.objects.filter(user=user).values_list('role__code', flat=True))
+                # Supprimer TOUS les anciens rôles (même logique que attribuer_role)
+                UserRole.objects.filter(user=user).delete()
+                # Créer le nouveau rôle unique et actif
+                UserRole.objects.create(
+                    user=user, role=role,
+                    actif=True, assigned_by=request.user
+                )
+                logger.info(
+                    f"Rôle de {user.email} changé : {ancien_roles} → {role.code} "
+                    f"par {request.user.email}"
+                )
             except Role.DoesNotExist:
-                pass
+                return Response({'detail': f'Rôle « {request.data["role_code"]} » introuvable.'}, status=400)
 
         return Response({'detail': 'Utilisateur modifié avec succès'})
 
     def delete(self, request, pk):
         try:
             user = User.objects.get(pk=pk)
-            if user.is_super_admin:
-                return Response({'detail': 'Impossible de supprimer un super admin'}, status=403)
-            user.is_active = False
-            user.save()
-            return Response({'detail': 'Utilisateur suspendu'})
         except User.DoesNotExist:
             return Response({'detail': 'Introuvable'}, status=404)
+
+        # Protections
+        if user == request.user:
+            return Response({'detail': 'Vous ne pouvez pas supprimer votre propre compte.'}, status=403)
+        if user.is_super_admin:
+            return Response({'detail': 'Impossible de supprimer un super administrateur.'}, status=403)
+
+        # Mode de suppression selon le paramètre
+        mode = request.query_params.get('mode', 'suspend')  # suspend | delete
+
+        if mode == 'delete':
+            # Suppression définitive
+            nom = user.nom_complet
+            user.delete()
+            return Response({'detail': f'Utilisateur « {nom} » supprimé définitivement.'})
+        else:
+            # Suspension (désactivation — conserve les données)
+            user.is_active = not user.is_active
+            user.save()
+            action = 'réactivé' if user.is_active else 'suspendu'
+            return Response({'detail': f'Utilisateur {action} avec succès.', 'is_active': user.is_active})
 
 
 # ─────────────────────────────────────────────────────────────
