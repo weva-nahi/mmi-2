@@ -24,7 +24,7 @@ const ROLES_LABELS: Record<string, string> = {
   DEMANDEUR:        'Demandeur industriel',
   SEC_CENTRAL:      'Secrétariat Central',
   SEC_GENERAL:      'Secrétaire Général',
-  MINISTRE:         'Ministre MMI — Signataire officiel',
+  MINISTRE:         'Ministre — Signataire officiel',
   DGI_DIRECTEUR:    "Directeur Général de l'Industrie",
   DGI_SECRETARIAT:  'Secrétariat DGI',
   DDPI_DIRECTEUR:   'Directeur DDPI',
@@ -32,7 +32,6 @@ const ROLES_LABELS: Record<string, string> = {
   DDPI_CHEF_USINES: 'Chef Service Usines Industrielles',
   DDPI_AGENT:       'Agent DDPI',
   SEC_COMITE_BP:    'Secrétaire du Comité BP',
-  MMI_SIGNATAIRE:   'Signataire MMI (alias Ministre)',
   SUPER_ADMIN:      'Super Administrateur',
 }
 
@@ -41,7 +40,7 @@ const ROLES_AGENTS = [
   'SEC_CENTRAL','SEC_GENERAL','MINISTRE',
   'DGI_DIRECTEUR','DGI_SECRETARIAT',
   'DDPI_DIRECTEUR','DDPI_CHEF_BP','DDPI_CHEF_USINES','DDPI_AGENT',
-  'SEC_COMITE_BP','MMI_SIGNATAIRE','SUPER_ADMIN',
+  'SEC_COMITE_BP','SUPER_ADMIN',
 ]
 // ── Layout ─────────────────────────────────────────────────────
 export default function AdminLayout() {

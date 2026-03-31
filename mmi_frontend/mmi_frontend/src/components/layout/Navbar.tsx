@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Menu, X, ChevronDown, LogIn, LayoutDashboard } from 'lucide-react'
+import { Menu, X, ChevronDown, LogIn, LayoutDashboard, Bell } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import { notificationsAPI } from '@/utils/api'
 import i18n from '@/i18n/i18n'
 
 const LANGS = [
@@ -16,8 +17,24 @@ export default function Navbar() {
   const { isAuthenticated, user, logout } = useAuthStore()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen]         = useState(false)
-  const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const currentLang = i18n.language
+  const [userMenuOpen, setUserMenuOpen]   = useState(false)
+  const [notifCount, setNotifCount]       = useState(0)
+  const currentLang  = i18n.language
+  const isDemandeur  = isAuthenticated && user?.roles?.includes('DEMANDEUR')
+  const isAgent      = isAuthenticated && !user?.roles?.includes('DEMANDEUR')
+
+  // Charger le count de notifs non lues (agents connectés)
+  useEffect(() => {
+    if (!isAgent) return
+    const load = () => {
+      notificationsAPI.nonLuesCount()
+        .then(r => setNotifCount(r.data.count || 0))
+        .catch(() => {})
+    }
+    load()
+    const interval = setInterval(load, 30000) // polling 30s
+    return () => clearInterval(interval)
+  }, [isAgent])
 
   const changeLang = (code: string) => {
     i18n.changeLanguage(code)
@@ -39,13 +56,10 @@ export default function Navbar() {
       DGI_SECRETARIAT: '/dgi',
       DDPI_CHEF:       '/ddpi',
       DDPI_AGENT:      '/ddpi',
-      MMI_SIGNATAIRE:  '/mmi',
+      MMI_SIGNATAIRE:  '/ministre',
     }
     return map[user.roles[0]] || '/connexion'
   }
-
-  const isDemandeur = isAuthenticated && user?.roles?.includes('DEMANDEUR')
-  const isAgent     = isAuthenticated && !user?.roles?.includes('DEMANDEUR')
 
   return (
     <nav className="navbar-mmi shadow-lg sticky top-0 z-50">
@@ -138,12 +152,18 @@ export default function Navbar() {
               /* Agent/Admin connecté : menu déroulant */
               <div className="relative flex-shrink-0">
                 <button
-                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  onClick={() => { setUserMenuOpen(!userMenuOpen); if (!userMenuOpen) setNotifCount(0) }}
                   className="flex items-center gap-1 text-white hover:text-yellow-200 transition-colors"
                   title="Mon espace"
                 >
-                  <div className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors">
+                  <div className="relative w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors">
                     <LayoutDashboard size={17} className="text-white" />
+                    {notifCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full
+                                       flex items-center justify-center text-white text-[9px] font-bold">
+                        {notifCount > 9 ? '9+' : notifCount}
+                      </span>
+                    )}
                   </div>
                   <ChevronDown size={12} className="text-white/70" />
                 </button>

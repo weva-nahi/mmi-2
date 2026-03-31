@@ -22,14 +22,20 @@ export default function LoginAgentPage() {
       setAuth(data.user, data.access, data.refresh)
       toast.success(`Bienvenue, ${data.user.nom} !`)
       const roles = data.user.roles as string[]
-      if (data.user.is_super_admin)                                                   navigate('/admin')
-      else if (roles.includes('SEC_CENTRAL'))                                         navigate('/secretariat')
-      else if (roles.includes('SEC_GENERAL'))                                         navigate('/sg')
-      else if (roles.includes('MINISTRE'))                                            navigate('/ministre')
-      else if (roles.includes('DGI_DIRECTEUR') || roles.includes('DGI_SECRETARIAT')) navigate('/dgi')
-      else if (roles.includes('DDPI_CHEF')     || roles.includes('DDPI_AGENT'))      navigate('/ddpi')
-      else if (roles.includes('MMI_SIGNATAIRE'))                                      navigate('/mmi')
-      else navigate('/')
+      if (data.user.is_super_admin)                        navigate('/admin')
+      else if (roles.includes('SEC_CENTRAL'))              navigate('/secretariat')
+      else if (roles.includes('SEC_GENERAL'))              navigate('/sg')
+      else if (roles.includes('MINISTRE'))                 navigate('/ministre')
+      else if (roles.includes('DGI_DIRECTEUR'))            navigate('/dgi')
+      else if (roles.includes('DGI_SECRETARIAT'))          navigate('/dgi')
+      else if (roles.includes('DDPI_DIRECTEUR'))           navigate('/ddpi')
+      else if (roles.includes('DDPI_CHEF_BP'))             navigate('/ddpi')
+      else if (roles.includes('DDPI_CHEF_USINES'))         navigate('/ddpi')
+      else if (roles.includes('DDPI_AGENT'))               navigate('/ddpi')
+      else if (roles.includes('DDPI_CHEF'))                navigate('/ddpi')
+      else if (roles.includes('SEC_COMITE_BP'))            navigate('/ddpi')
+      else if (roles.includes('MMI_SIGNATAIRE'))           navigate('/ministre')
+      else                                                  navigate('/')
     } catch (err: any) {
       setError(
         err.response?.data?.detail ||
@@ -43,7 +49,7 @@ export default function LoginAgentPage() {
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex flex-col">
-        {/* ── HERO BANNER ───────────────────────────────────── */}
+       {/* ── HERO BANNER ───────────────────────────────────── */}
       <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
         <img
           src="/images/banner_mmi.jpg"
@@ -53,7 +59,7 @@ export default function LoginAgentPage() {
           onError={e => { e.currentTarget.style.display = 'none' }}
         />
       </div>
-      
+
       {/* ══ FORMULAIRE AGENTS ══ */}
       <div className="flex-1 flex items-start justify-center px-4 py-10">
         <div className="w-full max-w-md">

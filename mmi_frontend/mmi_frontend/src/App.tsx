@@ -17,7 +17,7 @@ import RegisterPage   from '@/pages/auth/RegisterPage'
 import LoginAgentPage from '@/pages/auth/LoginAgentPage'
 import MotDePasseOubliePage  from '@/pages/auth/MotDePasseOubliePage'
 import ActivationPage        from '@/pages/auth/ActivationPage'
-import ResetPasswordPage     from '@/pages/auth/ResetPasswordPage' 
+import ResetPasswordPage     from '@/pages/auth/ResetPasswordPage'
 import ChangePasswordPage    from '@/pages/auth/ChangePasswordPage'
 
 // Demandeur
@@ -41,7 +41,7 @@ import { SecretariatLayout, SecretariatDashboard, SecretariatDossiers, Secretari
 import { SGLayout, SGDashboard, SGDossiers, SGTraites, SGDossier } from '@/pages/agents/SGPages'
 
 // Ministre
-import { MinistreLayout, MinistreDashboard, MinistreDossiers, MinistreTraites, MinistreDossier } from '@/pages/agents/MinistреPages'
+import { MinistreLayout, MinistreDashboard, MinistreDossiers, MinistreSignature, MinistreTraites, MinistreDossier } from '@/pages/agents/MinistреPages'
 
 // DGI
 import { DGILayout, DGIDashboard, DGIDossiers, DGISignature, DGIDossier, DGIAnalyticsPage, DGISecretariatDossier } from '@/pages/agents/DGIPages'
@@ -53,7 +53,6 @@ import FormulaireComiteBP from '@/pages/agents/FormulaireComiteBP'
 import Distance500m       from '@/pages/agents/Distance500m'
 
 // MMI
-import { MMILayout, MMIDashboard, MMIDossiers, MMISignes, MMIDossier } from '@/pages/agents/MMIPages'
 
 // Admin
 import AdminLayout, { AdminDashboard, AdminUsers, AdminActualites, AdminConfig } from '@/pages/admin/AdminFullPages'
@@ -152,10 +151,11 @@ export default function App() {
             <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
-          {/* ── Ministre ── */}
-          <Route path="/ministre" element={<RouteGuard roles={['MINISTRE']}><MinistreLayout /></RouteGuard>}>
+          {/* ── Ministre + Signataire MMI (rôle fusionné) ── */}
+          <Route path="/ministre" element={<RouteGuard roles={['MINISTRE','MMI_SIGNATAIRE']}><MinistreLayout /></RouteGuard>}>
             <Route index              element={<MinistreDashboard />} />
             <Route path="dossiers"    element={<MinistreDossiers />} />
+            <Route path="signature"   element={<MinistreSignature />} />
             <Route path="traites"     element={<MinistreTraites />} />
             <Route path="dossier/:id" element={<MinistreDossier />} />
             <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
@@ -187,14 +187,6 @@ export default function App() {
             <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
-          {/* ── MMI Signataire ── */}
-          <Route path="/mmi" element={<RouteGuard roles={['MMI_SIGNATAIRE']}><MMILayout /></RouteGuard>}>
-            <Route index              element={<MMIDashboard />} />
-            <Route path="dossiers"    element={<MMIDossiers />} />
-            <Route path="signes"      element={<MMISignes />} />
-            <Route path="dossier/:id" element={<MMIDossier />} />
-            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
-          </Route>
 
           {/* ── Super Admin ── */}
           <Route path="/admin" element={<RouteGuard roles={['SUPER_ADMIN']}><AdminLayout /></RouteGuard>}>
