@@ -26,7 +26,9 @@ class IsSecretaireGeneral(BasePermission):
 
 class IsMinistre(BasePermission):
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.has_role('MINISTRE')
+        return request.user.is_authenticated and (
+            request.user.has_role('MINISTRE') or request.user.has_role('MMI_SIGNATAIRE')
+        )
 
 
 class IsDGI(BasePermission):
@@ -47,7 +49,9 @@ class IsDGIDirecteur(BasePermission):
 
 class IsMMISignataire(BasePermission):
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.has_role('MMI_SIGNATAIRE')
+        return request.user.is_authenticated and (
+            request.user.has_role('MMI_SIGNATAIRE') or request.user.has_role('MINISTRE')
+        )
 
 
 class IsAgentInstitutionnel(BasePermission):

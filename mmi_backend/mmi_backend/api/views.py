@@ -479,6 +479,7 @@ class DemandeViewSet(viewsets.ModelViewSet):
             'SEC_COMITE_BP':   ['EN_COMMISSION_BP', 'PV_COMITE_DEPOSE',
                                  'ATTENTE_QUITTANCE', 'ACCORD_PRINCIPE'],
             'MMI_SIGNATAIRE':  ['ARRETE_EN_COURS', 'SIGNATURE_DGI', 'SIGNATURE_MMI'],
+            'MINISTRE':        ['TRANSMISE_MINISTRE', 'EN_LECTURE_MINISTRE', 'ARRETE_EN_COURS', 'SIGNATURE_MMI'],
         }
 
         # Appliquer le filtre selon le premier rôle actif de l'utilisateur
