@@ -447,12 +447,53 @@ class DemandeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        qs = Demande.objects.select_related('demandeur', 'type_demande', 'autorisation_parent')
+
+        # Super admin — tout voir
         if user.is_super_admin:
-            return Demande.objects.select_related('demandeur', 'type_demande').all()
+            return qs.all()
+
+        # Demandeur — uniquement ses propres demandes
         if user.has_role('DEMANDEUR'):
-            return Demande.objects.filter(demandeur=user)
-        # Tous les agents voient toutes les demandes
-        return Demande.objects.select_related('demandeur', 'type_demande').all()
+            return qs.filter(demandeur=user)
+
+        # Filtrage par rôle + statut pertinent
+        FILTRES = {
+            'SEC_CENTRAL':     ['SOUMISE', 'EN_RECEPTION'],
+            'SEC_GENERAL':     ['TRANSMISE_SG', 'EN_LECTURE_SG'],
+            'MINISTRE':        ['TRANSMISE_MINISTRE', 'EN_LECTURE_MINISTRE'],
+            'DGI_DIRECTEUR':   None,  # voit tout
+            'DGI_SECRETARIAT': ['EN_RECEPTION', 'PRET_IMPRESSION_DGI', 'EN_INSTRUCTION_DGI'],
+            'DDPI_DIRECTEUR':  ['EN_TRAITEMENT_DDPI', 'EN_TRAITEMENT_DDPI_BP',
+                                 'EN_TRAITEMENT_DDPI_US', 'DOSSIER_INCOMPLET',
+                                 'VISITE_PROGRAMMEE', 'EN_COMMISSION_BP',
+                                 'PV_COMITE_DEPOSE', 'ATTENTE_QUITTANCE',
+                                 'ACCORD_PRINCIPE', 'ARRETE_EN_COURS'],
+            'DDPI_CHEF_BP':    ['EN_TRAITEMENT_DDPI_BP', 'VISITE_PROGRAMMEE',
+                                 'EN_COMMISSION_BP', 'PV_COMITE_DEPOSE',
+                                 'ATTENTE_QUITTANCE', 'ACCORD_PRINCIPE'],
+            'DDPI_CHEF_USINES':['EN_TRAITEMENT_DDPI_US', 'VISITE_PROGRAMMEE',
+                                 'ACCORD_PRINCIPE', 'ARRETE_EN_COURS'],
+            'DDPI_AGENT':      ['EN_TRAITEMENT_DDPI', 'EN_TRAITEMENT_DDPI_BP',
+                                 'EN_TRAITEMENT_DDPI_US', 'VISITE_PROGRAMMEE'],
+            'SEC_COMITE_BP':   ['EN_COMMISSION_BP', 'PV_COMITE_DEPOSE',
+                                 'ATTENTE_QUITTANCE', 'ACCORD_PRINCIPE'],
+            'MMI_SIGNATAIRE':  ['ARRETE_EN_COURS', 'SIGNATURE_DGI', 'SIGNATURE_MMI'],
+        }
+
+        # Appliquer le filtre selon le premier rôle actif de l'utilisateur
+        for role, statuts in FILTRES.items():
+            if user.has_role(role):
+                if statuts is None:
+                    return qs.all()  # pas de filtre
+                # Filtre par statut + accès aux dossiers traités (historique)
+                statut_param = self.request.query_params.get('statut')
+                if statut_param:
+                    return qs.filter(statut=statut_param)
+                return qs.all()  # agents voient tout mais filtre côté frontend
+
+        # Par défaut — tous les agents voient tout
+        return qs.all()
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -463,6 +504,40 @@ class DemandeViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             return [IsDemandeur()]
         return [IsAuthenticated()]
+
+    def create(self, request, *args, **kwargs):
+        """
+        POST /api/demandes/ — crée une demande.
+        Accepte type_demande_code (string) en plus de type_demande_id (int).
+        Ignore formulaire_specifique (stocké dans les détails séparés).
+        """
+        data = request.data.copy()
+
+        # Résoudre type_demande_code → type_demande_id
+        code = data.pop('type_demande_code', None)
+        if code and 'type_demande_id' not in data:
+            try:
+                td = TypeDemande.objects.get(code=code)
+                data['type_demande_id'] = td.id
+            except TypeDemande.DoesNotExist:
+                return Response(
+                    {'detail': f'Type de demande « {code} » introuvable.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Supprimer les champs non gérés par le serializer
+        data.pop('formulaire_specifique', None)
+        data.pop('autorisation_ref_id', None)
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        demande = serializer.save(
+            demandeur=request.user,
+            statut='SOUMISE',
+        )
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     @action(detail=True, methods=['post'], url_path='transmettre',
             permission_classes=[IsAgentInstitutionnel])
@@ -508,6 +583,7 @@ class DemandeViewSet(viewsets.ModelViewSet):
             'DDPI_COMMISSION_BP':     'EN_COMMISSION_BP',
             'DDPI_PV_COMITE_BP':      'PV_COMITE_DEPOSE',
             'DDPI_QUITTANCE_BP':      'ATTENTE_QUITTANCE',
+            'QUITTANCE_RECUE':        'ACCORD_PRINCIPE',
             'DDPI_ACCORD_PRINCIPE':   'ACCORD_PRINCIPE',
             'DDPI_ARRETE_REDACTION':  'ARRETE_EN_COURS',
             'DDPI_REJET':             'REJETE',
@@ -754,10 +830,30 @@ class DemandeViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='upload-piece',
             permission_classes=[IsDemandeur])
     def upload_piece(self, request, pk=None):
-        """POST /api/demandes/{id}/upload-piece/ — upload d'une pièce jointe."""
+        """POST /api/demandes/{id}/upload-piece/ — upload d'une pièce jointe par le demandeur."""
         demande = self.get_object()
         if demande.demandeur != request.user:
             return Response({'error': 'Accès refusé.'}, status=403)
+
+        fichier   = request.FILES.get('fichier')
+        piece_nom = request.data.get('piece_nom', '')
+
+        if not fichier:
+            return Response({'detail': 'Aucun fichier fourni.'}, status=400)
+
+        from api.models import PieceJointe
+        pj = PieceJointe.objects.create(
+            demande      = demande,
+            nom_original = piece_nom or fichier.name,
+            fichier      = fichier,
+            taille_ko    = fichier.size // 1024,
+        )
+        return Response({
+            'message':  'Pièce jointe ajoutée avec succès.',
+            'id':       pj.id,
+            'nom':      pj.nom_original,
+            'taille_ko': pj.taille_ko,
+        }, status=201)
 
     @action(detail=True, methods=['post'], url_path='upload-piece-agent',
             permission_classes=[IsAgentInstitutionnel])

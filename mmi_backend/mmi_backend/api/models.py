@@ -299,10 +299,10 @@ class Demande(models.Model):
     gestionnaire        = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
                                              related_name='dossiers_geres')
     statut              = models.CharField(max_length=50, choices=STATUTS, default='SOUMISE')
-    raison_sociale      = models.CharField(max_length=255)
-    activite            = models.CharField(max_length=255)
-    adresse             = models.TextField()
-    wilaya              = models.CharField(max_length=100)
+    raison_sociale      = models.CharField(max_length=255, blank=True, default='')
+    activite            = models.CharField(max_length=255, blank=True, default='')
+    adresse             = models.TextField(blank=True, default='')
+    wilaya              = models.CharField(max_length=100, blank=True, default='')
     latitude            = models.FloatField(null=True, blank=True)
     longitude           = models.FloatField(null=True, blank=True)
     autorisation_parent = models.ForeignKey('Autorisation', on_delete=models.SET_NULL,
@@ -461,8 +461,11 @@ class Autorisation(models.Model):
                ('RENOUVELLEMENT','Renouvellement'),('EXTENSION','Extension')]
     STATUTS = [('active','Active'),('suspendue','Suspendue'),('expiree','Expirée'),('revoquee','Révoquée')]
 
-    demande         = models.OneToOneField(Demande, on_delete=models.PROTECT, related_name='autorisation')
-    numero_auto     = models.CharField(max_length=80, unique=True)
+    demande         = models.OneToOneField(Demande, on_delete=models.PROTECT, related_name='autorisation', null=True, blank=True)
+    numero_auto       = models.CharField(max_length=80, unique=True)
+    raison_sociale    = models.CharField(max_length=255, blank=True, default='')
+    activite          = models.CharField(max_length=255, blank=True, default='')
+    source_historique = models.BooleanField(default=False)
     type            = models.CharField(max_length=20, choices=TYPES)
     statut          = models.CharField(max_length=20, choices=STATUTS, default='active')
     latitude        = models.FloatField(null=True, blank=True)
@@ -573,6 +576,18 @@ class RenouvellementDetail(models.Model):
 
     demande = models.OneToOneField(Demande, on_delete=models.CASCADE, related_name='renouvellement_detail')
 
+    # Lien autorisation à renouveler
+    autorisation_origine = models.ForeignKey(
+        'Autorisation', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='renouvellements',
+        help_text='Autorisation dont le renouvellement est demandé'
+    )
+    numero_autorisation_original = models.CharField(
+        max_length=80, blank=True, default='',
+        help_text='Numéro saisi par le demandeur (validation manuelle possible)'
+    )
+
     # I
     abreviation            = models.CharField(max_length=50, blank=True, default='')
     nationalite_entreprise = models.CharField(max_length=100, blank=True, default='')
@@ -632,6 +647,19 @@ class ExtensionDetail(models.Model):
                  ('activite','Activité'),('equipement','Équipements')]
 
     demande                 = models.OneToOneField(Demande, on_delete=models.CASCADE, related_name='extension_detail')
+
+    # Lien autorisation à étendre
+    autorisation_origine = models.ForeignKey(
+        'Autorisation', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='extensions',
+        help_text='Autorisation dont l\'extension est demandée'
+    )
+    numero_autorisation_original = models.CharField(
+        max_length=80, blank=True, default='',
+        help_text='Numéro de l\'autorisation originale'
+    )
+
     type_extension          = models.CharField(max_length=20, choices=TYPES_EXT)
     surface_actuelle        = models.FloatField(null=True, blank=True)
     surface_apres           = models.FloatField(null=True, blank=True)
