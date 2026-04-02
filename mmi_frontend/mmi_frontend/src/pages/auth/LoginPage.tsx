@@ -29,8 +29,11 @@ export default function LoginPage() {
       else if (roles.includes('SEC_CENTRAL'))                                         navigate('/secretariat')
       else if (roles.includes('SEC_GENERAL'))                                         navigate('/sg')
       else if (roles.includes('MINISTRE'))                                            navigate('/ministre')
-      else if (roles.includes('DGI_DIRECTEUR') || roles.includes('DGI_SECRETARIAT')) navigate('/dgi')
-      else if (roles.includes('DDPI_CHEF')     || roles.includes('DDPI_AGENT'))      navigate('/ddpi')
+      else if (roles.includes('DGI_DIRECTEUR'))   navigate('/dgi')
+      else if (roles.includes('DGI_SECRETARIAT')) navigate('/dgi-sec')
+      else if (roles.includes('DDPI_DIRECTEUR')  || roles.includes('DDPI_CHEF_BP') ||
+               roles.includes('DDPI_CHEF_USINES') || roles.includes('DDPI_CHEF')   ||
+               roles.includes('DDPI_AGENT')       || roles.includes('SEC_COMITE_BP')) navigate('/ddpi')
       else if (roles.includes('MMI_SIGNATAIRE'))                                      navigate('/ministre')
       else navigate('/')
     } catch (err: any) {
@@ -46,16 +49,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex flex-col">
-        {/* ── HERO BANNER ───────────────────────────────────── */}
-      <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
-        <img
-          src="/images/banner_mmi.jpg"
-          alt="Ministère des Mines et de l'Industrie"
-          className="w-full h-full object-cover object-center block"
-          style={{ maxHeight: 320 }}
-          onError={e => { e.currentTarget.style.display = 'none' }}
-        />
-      </div>
 
       {/* ══ FORMULAIRE ══ */}
       <div className="flex-1 flex items-start justify-center px-4 py-10">
@@ -164,12 +157,6 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          <p className="text-center text-xs text-gray-400 mt-5">
-            Agent MMI ?{' '}
-            <Link to="/connexion-agent" className="text-mmi-green hover:underline font-medium">
-              Accès agents / administration
-            </Link>
-          </p>
         </div>
       </div>
     </div>

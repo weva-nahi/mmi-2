@@ -27,7 +27,7 @@ export default function LoginAgentPage() {
       else if (roles.includes('SEC_GENERAL'))              navigate('/sg')
       else if (roles.includes('MINISTRE'))                 navigate('/ministre')
       else if (roles.includes('DGI_DIRECTEUR'))            navigate('/dgi')
-      else if (roles.includes('DGI_SECRETARIAT'))          navigate('/dgi')
+      else if (roles.includes('DGI_SECRETARIAT'))          navigate('/dgi-sec')
       else if (roles.includes('DDPI_DIRECTEUR'))           navigate('/ddpi')
       else if (roles.includes('DDPI_CHEF_BP'))             navigate('/ddpi')
       else if (roles.includes('DDPI_CHEF_USINES'))         navigate('/ddpi')
@@ -49,7 +49,7 @@ export default function LoginAgentPage() {
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex flex-col">
-       {/* ── HERO BANNER ───────────────────────────────────── */}
+      {/* ── HERO BANNER ───────────────────────────────────── */}
       <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
         <img
           src="/images/banner_mmi.jpg"

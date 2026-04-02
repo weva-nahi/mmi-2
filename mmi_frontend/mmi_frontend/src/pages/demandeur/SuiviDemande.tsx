@@ -25,6 +25,7 @@ export default function SuiviDemande() {
     try {
       const fd = new FormData()
       fd.append('fichier', quittanceFile)
+      fd.append('piece_nom', 'quittance')
       await demandesAPI.uploadPiece(demande.id, fd)
       const toast = (await import('react-hot-toast')).default
       toast.success('Quittance déposée avec succès')

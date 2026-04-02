@@ -85,11 +85,16 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
         fd.append('fichier', pieceJointe)
         await demandesAPI.uploadPieceAgent(demande.id, fd).catch(() => {})
       }
-      await demandesAPI.transmettre(demande.id, {
-        etape_code,
-        action,
-        commentaire,
-      })
+      // MMI_SIGNATURE → validerFinal (délivre l'autorisation)
+      if (etape_code === 'MMI_SIGNATURE') {
+        await demandesAPI.validerFinal(demande.id, commentaire)
+      } else {
+        await demandesAPI.transmettre(demande.id, {
+          etape_code,
+          action,
+          commentaire,
+        })
+      }
       toast.success('Action effectuée avec succès')
       // Recharger
       const r = await demandesAPI.get(demande.id)

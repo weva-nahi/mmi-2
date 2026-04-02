@@ -48,15 +48,20 @@ export default function Navbar() {
     if (!user) return '/connexion'
     if (user.is_super_admin) return '/admin'
     const map: Record<string, string> = {
-      DEMANDEUR:       '/demandeur',
-      SEC_CENTRAL:     '/secretariat',
-      SEC_GENERAL:     '/sg',
-      MINISTRE:        '/ministre',
-      DGI_DIRECTEUR:   '/dgi',
-      DGI_SECRETARIAT: '/dgi',
-      DDPI_CHEF:       '/ddpi',
-      DDPI_AGENT:      '/ddpi',
-      MMI_SIGNATAIRE:  '/ministre',
+      DEMANDEUR:        '/demandeur',
+      SEC_CENTRAL:      '/secretariat',
+      SEC_GENERAL:      '/sg',
+      MINISTRE:         '/ministre',
+      MMI_SIGNATAIRE:   '/ministre',
+      DGI_DIRECTEUR:    '/dgi',
+      DGI_SECRETARIAT:  '/dgi-sec',
+      DDPI_DIRECTEUR:   '/ddpi',
+      DDPI_CHEF_BP:     '/ddpi',
+      DDPI_CHEF_USINES: '/ddpi',
+      DDPI_CHEF:        '/ddpi',
+      DDPI_AGENT:       '/ddpi',
+      SEC_COMITE_BP:    '/ddpi',
+      SUPER_ADMIN:      '/admin',
     }
     return map[user.roles[0]] || '/connexion'
   }

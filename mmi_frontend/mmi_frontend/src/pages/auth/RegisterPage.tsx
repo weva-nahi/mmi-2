@@ -65,7 +65,7 @@ export default function RegisterPage() {
 
   if (success) {
     return (
-      <div className="min-h-[calc(100vh-64px)] flex items-center justify-center bg-gray-50 py-12 px-4">
+      <div className="bg-gray-50 py-10 px-4 flex items-center justify-center">
         <div className="w-full max-w-md text-center">
           <div className="card p-10">
             <div className="w-16 h-16 bg-mmi-green-lt rounded-full flex items-center justify-center mx-auto mb-5">
@@ -90,7 +90,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-64px)] flex items-center justify-center bg-gray-50 py-12 px-4">
+    <div className="bg-gray-50 py-10 px-4 flex items-center justify-center">
       <div className="w-full max-w-2xl">
         <div className="text-center mb-8">
           <img src="/images/logo_mmi.png" alt="MMI" className="h-14 w-14 object-contain mx-auto mb-3 rounded-full"

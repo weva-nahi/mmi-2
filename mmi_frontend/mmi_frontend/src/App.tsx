@@ -1,6 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
 import Navbar from '@/components/layout/Navbar'
-import { useLocation } from 'react-router-dom'
 import Footer from '@/components/layout/Footer'
 import RouteGuard from '@/components/ui/RouteGuard'
 
@@ -44,7 +43,8 @@ import { SGLayout, SGDashboard, SGDossiers, SGTraites, SGDossier } from '@/pages
 import { MinistreLayout, MinistreDashboard, MinistreDossiers, MinistreSignature, MinistreTraites, MinistreDossier } from '@/pages/agents/MinistреPages'
 
 // DGI
-import { DGILayout, DGIDashboard, DGIDossiers, DGISignature, DGIDossier, DGIAnalyticsPage, DGISecretariatDossier } from '@/pages/agents/DGIPages'
+import { DGILayout, DGIDashboard, DGIDossiers, DGISignature, DGIDossier, DGIAnalyticsPage, DGISecretariatDossier,
+         DGISecLayout, DGISecDashboard, DGISecDossiers, DGISecTraites } from '@/pages/agents/DGIPages'
 
 // DDPI
 import { DDPILayout, DDPIDashboard, DDPIDossiers, DDPIVisites, DDPIComites, DDPIDossier, DDPIChefBPDossier, DDPIChefUsinesDossier, SecretaireComiteBPDossier } from '@/pages/agents/DDPIPages'
@@ -75,15 +75,10 @@ const NotFound = () => (
   </div>
 )
 
-const AUTH_ROUTES = ['/inscription', '/mot-de-passe-oublie']
-
 export default function App() {
-  const location = useLocation()
-  const hideNavbar = AUTH_ROUTES.includes(location.pathname)
-
   return (
     <div className="flex flex-col min-h-screen">
-      {!hideNavbar && <Navbar />}
+      <Navbar />
       <div className="flex-1">
         <Routes>
           {/* ── Public ── */}
@@ -162,13 +157,22 @@ export default function App() {
           </Route>
 
           {/* ── DGI ── */}
-          <Route path="/dgi" element={<RouteGuard roles={['DGI_DIRECTEUR','DGI_SECRETARIAT']}><DGILayout /></RouteGuard>}>
+          <Route path="/dgi" element={<RouteGuard roles={['DGI_DIRECTEUR']}><DGILayout /></RouteGuard>}>
             <Route index              element={<DGIDashboard />} />
             <Route path="dossiers"    element={<DGIDossiers />} />
             <Route path="signature"   element={<DGISignature />} />
             <Route path="dossier/:id"         element={<DGIDossier />} />
             <Route path="dossier-sec/:id"     element={<DGISecretariatDossier />} />
             <Route path="analytics"           element={<DGIAnalyticsPage />} />
+            <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
+          </Route>
+
+          {/* ── Secrétariat DGI ── */}
+          <Route path="/dgi-sec" element={<RouteGuard roles={['DGI_SECRETARIAT']}><DGISecLayout /></RouteGuard>}>
+            <Route index              element={<DGISecDashboard />} />
+            <Route path="dossiers"    element={<DGISecDossiers />} />
+            <Route path="traites"     element={<DGISecTraites />} />
+            <Route path="dossier-sec/:id" element={<DGISecretariatDossier />} />
             <Route path="changer-mot-de-passe" element={<ChangePasswordPage />} />
           </Route>
 
@@ -202,7 +206,7 @@ export default function App() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
-      {!hideNavbar && <Footer />}
+      <Footer />
     </div>
   )
 }
