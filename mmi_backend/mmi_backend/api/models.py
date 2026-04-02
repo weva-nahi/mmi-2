@@ -430,19 +430,19 @@ class PieceJointe(models.Model):
 
 class Notification(models.Model):
     TYPES = [
-        ('statut_change','Changement statut'),('document_pret','Document disponible'),
-        ('action_requise','Action requise'),('dossier_incomplet','Dossier incomplet'),
-        ('rejet','Rejetée'),('validation','Validée'),
+        ('ACTION_REQUISE','Action requise'),('VALIDATION','Validée'),
+        ('ACCORD_PRINCIPE','Accord de principe'),('REJET','Rejetée'),
+        ('INFO','Information'),
     ]
 
-    user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
-    demande    = models.ForeignKey(Demande, on_delete=models.CASCADE, null=True, blank=True,
-                                    related_name='notifications')
-    type       = models.CharField(max_length=30, choices=TYPES)
-    titre      = models.CharField(max_length=200)
-    message    = models.TextField()
-    lu         = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
+    destinataire = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    demande      = models.ForeignKey(Demande, on_delete=models.CASCADE, null=True, blank=True,
+                                     related_name='notifications')
+    type_notif   = models.CharField(max_length=30, choices=TYPES, default='ACTION_REQUISE')
+    titre        = models.CharField(max_length=200)
+    message      = models.TextField()
+    lu           = models.BooleanField(default=False)
+    created_at   = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'notification'

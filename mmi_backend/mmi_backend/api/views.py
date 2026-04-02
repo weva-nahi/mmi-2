@@ -460,6 +460,7 @@ class DemandeViewSet(viewsets.ModelViewSet):
         # Filtrage par rôle + statut pertinent
         FILTRES = {
             'SEC_CENTRAL':     ['SOUMISE', 'EN_RECEPTION'],
+            'DGI_SECRETARIAT': ['SOUMISE', 'DEPOSEE', 'EN_RECEPTION', 'EN_INSTRUCTION_DGI', 'VALIDE', 'REJETEE'],
             'SEC_GENERAL':     ['TRANSMISE_SG', 'EN_LECTURE_SG'],
             'MINISTRE':        ['TRANSMISE_MINISTRE', 'EN_LECTURE_MINISTRE'],
             'DGI_DIRECTEUR':   None,  # voit tout
@@ -536,6 +537,43 @@ class DemandeViewSet(viewsets.ModelViewSet):
             demandeur=request.user,
             statut='SOUMISE',
         )
+
+        # ── Notifier le Secrétariat DGI dès la soumission ───────
+        try:
+            from api.models import UserRole, Notification as Notif, User
+            from django.core.mail import send_mail
+            from django.conf import settings
+
+            titre_notif   = f"Nouvelle demande soumise — {demande.numero_ref}"
+            message_notif = (
+                f"Une nouvelle demande a été soumise par {demande.demandeur.nom_complet}.\n"
+                f"Référence : {demande.numero_ref}\n"
+                f"Type : {demande.type_demande.libelle}\n\n"
+                f"Vous pouvez l'imprimer et la traiter dès maintenant."
+            )
+            user_ids = UserRole.objects.filter(
+                role__code='DGI_SECRETARIAT', actif=True
+            ).values_list('user_id', flat=True)
+            destinataires = User.objects.filter(id__in=user_ids, is_active=True)
+
+            for dest in destinataires:
+                Notif.objects.create(
+                    destinataire=dest,
+                    demande=demande,
+                    type_notif='ACTION_REQUISE',
+                    titre=titre_notif,
+                    message=message_notif,
+                )
+                if dest.email:
+                    send_mail(
+                        subject=f"[MMI] {titre_notif}",
+                        message=f"Bonjour {dest.nom_complet},\n\n{message_notif}\n\nConnectez-vous sur la plateforme pour imprimer le dossier.\n\nCordialement,\nPlateforme MMIAPP",
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[dest.email],
+                        fail_silently=True,
+                    )
+        except Exception:
+            pass  # Ne jamais bloquer la soumission si la notif échoue
 
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -849,6 +887,58 @@ class DemandeViewSet(viewsets.ModelViewSet):
             fichier      = fichier,
             taille_ko    = fichier.size // 1024,
         )
+
+        # ── Notification automatique si c'est une quittance ──────
+        nom_lower = (piece_nom or fichier.name).lower()
+        is_quittance = (
+            'quittance' in nom_lower
+            or demande.statut in ['PV_COMITE_DEPOSE', 'ATTENTE_QUITTANCE']
+        )
+        if is_quittance:
+            try:
+                from api.models import UserRole, Notification as Notif, User
+                from django.core.mail import send_mail
+                from django.conf import settings
+
+                titre_notif   = f"Quittance déposée — {demande.numero_ref}"
+                message_notif = (
+                    f"Le demandeur {demande.demandeur.nom_complet} a déposé "
+                    f"sa quittance de paiement pour le dossier {demande.numero_ref} "
+                    f"({demande.type_demande.libelle}).\n"
+                    f"Vous pouvez maintenant valider la quittance et accorder l'accord de principe."
+                )
+
+                # Notifier DDPI_CHEF_BP en priorité, puis DDPI_DIRECTEUR
+                roles_cibles = ['DDPI_CHEF_BP', 'DDPI_DIRECTEUR']
+                for role_code in roles_cibles:
+                    user_ids = UserRole.objects.filter(
+                        role__code=role_code, actif=True
+                    ).values_list('user_id', flat=True)
+                    destinataires = User.objects.filter(id__in=user_ids, is_active=True)
+                    for dest in destinataires:
+                        Notif.objects.create(
+                            destinataire=dest,
+                            demande=demande,
+                            type_notif='ACTION_REQUISE',
+                            titre=titre_notif,
+                            message=message_notif,
+                        )
+                        if dest.email:
+                            send_mail(
+                                subject=f"[MMI] {titre_notif}",
+                                message=(
+                                    f"Bonjour {dest.nom_complet},\n\n"
+                                    f"{message_notif}\n\n"
+                                    f"Connectez-vous sur la plateforme pour valider.\n\n"
+                                    f"Cordialement,\nPlateforme MMIAPP"
+                                ),
+                                from_email=settings.DEFAULT_FROM_EMAIL,
+                                recipient_list=[dest.email],
+                                fail_silently=True,
+                            )
+            except Exception:
+                pass  # Ne jamais bloquer l'upload si la notif échoue
+
         return Response({
             'message':  'Pièce jointe ajoutée avec succès.',
             'id':       pj.id,
@@ -931,8 +1021,11 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        qs = Notification.objects.filter(destinataire=self.request.user)
-        return qs.order_by('-created_at')
+        try:
+            qs = Notification.objects.filter(destinataire=self.request.user)
+            return qs.order_by('-created_at')
+        except Exception:
+            return Notification.objects.none()
 
     @action(detail=True, methods=['post'], url_path='marquer-lu')
     def marquer_lu(self, request, pk=None):
@@ -948,8 +1041,25 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'], url_path='non-lues-count')
     def non_lues_count(self, request):
         """GET /api/notifications/non-lues-count/ — nombre de notifications non lues."""
-        count = self.get_queryset().filter(lu=False).count()
-        return Response({'count': count})
+        try:
+            count = self.get_queryset().filter(lu=False).count()
+            return Response({'count': count})
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f'non_lues_count error: {e}')
+            return Response({'count': 0})
+
+    @action(detail=False, methods=['get'], url_path='mes-notifications')
+    def mes_notifications(self, request):
+        """GET /api/notifications/mes-notifications/ — liste des notifications de l'utilisateur."""
+        try:
+            qs = self.get_queryset()[:20]
+            serializer = self.get_serializer(qs, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f'mes_notifications error: {e}')
+            return Response([])
 
 
 # ─────────────────────────────────────────────────────────────
