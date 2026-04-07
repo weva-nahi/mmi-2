@@ -293,13 +293,20 @@ class DemandeDetailSerializer(serializers.ModelSerializer):
     type_demande_id = serializers.PrimaryKeyRelatedField(
         queryset=TypeDemande.objects.all(), source='type_demande', write_only=True
     )
-    demandeur         = UserListSerializer(read_only=True)
-    demandeur_nom     = serializers.SerializerMethodField()
-    demandeur_email   = serializers.SerializerMethodField()
+    demandeur             = UserListSerializer(read_only=True)
+    demandeur_nom         = serializers.SerializerMethodField()
+    demandeur_email       = serializers.SerializerMethodField()
     demandeur_identifiant = serializers.SerializerMethodField()
+    # raison_sociale = toujours nom_entreprise du demandeur
+    raison_sociale        = serializers.SerializerMethodField()
     pieces_jointes    = PieceJointeSerializer(many=True, read_only=True)
     etapes            = EtapeTraitementSerializer(many=True, read_only=True)
     autorisation      = serializers.SerializerMethodField()
+
+    def get_raison_sociale(self, obj):
+        if obj.demandeur:
+            return obj.demandeur.nom_entreprise or obj.raison_sociale or obj.demandeur.nom_complet or ''
+        return obj.raison_sociale or ''
 
     def get_demandeur_nom(self, obj):
         return obj.demandeur.nom_complet if obj.demandeur else ''

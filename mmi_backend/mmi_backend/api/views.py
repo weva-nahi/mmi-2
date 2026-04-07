@@ -152,6 +152,7 @@ class RoleViewSet(viewsets.ReadOnlyModelViewSet):
     queryset           = Role.objects.all()
     serializer_class   = RoleSerializer
     permission_classes = [IsAgentInstitutionnel]
+    pagination_class   = None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -191,6 +192,7 @@ class ActualiteViewSet(viewsets.ModelViewSet):
 
 class DocumentPublicViewSet(viewsets.ModelViewSet):
     serializer_class = DocumentPublicSerializer
+    pagination_class   = None
     filter_backends  = [DjangoFilterBackend]
     filterset_fields = ['categorie', 'langue', 'publie']
 
@@ -210,6 +212,7 @@ class DocumentPublicViewSet(viewsets.ModelViewSet):
 
 class ProjetBanqueViewSet(viewsets.ModelViewSet):
     serializer_class = ProjetBanqueSerializer
+    pagination_class   = None
     filter_backends  = [DjangoFilterBackend]
     filterset_fields = ['statut', 'secteur', 'publie']
 
@@ -235,6 +238,7 @@ class TypeDemandeViewSet(viewsets.ReadOnlyModelViewSet):
     queryset           = TypeDemande.objects.filter(actif=True).order_by('id')
     serializer_class   = TypeDemandeSerializer
     permission_classes = [AllowAny]
+    pagination_class   = None
 
 
 class ImprimerDossierView(generics.GenericAPIView):
@@ -282,9 +286,10 @@ class ImprimerDossierView(generics.GenericAPIView):
 
 class PieceRequiseViewSet(viewsets.ModelViewSet):
     """CRUD pièces requises — lecture publique, écriture Super Admin."""
-    serializer_class = PieceRequiseSerializer
-    filter_backends  = [DjangoFilterBackend]
-    filterset_fields = ['type_demande', 'obligatoire']
+    serializer_class   = PieceRequiseSerializer
+    filter_backends    = [DjangoFilterBackend]
+    filterset_fields   = ['type_demande', 'obligatoire']
+    pagination_class   = None  # Pas de pagination — retourne tout d'un coup
 
     def get_queryset(self):
         qs = PieceRequise.objects.all().order_by('type_demande', 'ordre')
@@ -533,10 +538,23 @@ class DemandeViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        demande = serializer.save(
-            demandeur=request.user,
-            statut='SOUMISE',
-        )
+
+        # Compléter automatiquement depuis le profil du demandeur
+        demandeur = request.user
+        extra = {
+            'demandeur':      demandeur,
+            'statut':         'SOUMISE',
+            # Toujours prendre nom_entreprise du demandeur comme raison_sociale
+            'raison_sociale': (
+                getattr(demandeur, 'nom_entreprise', '') or
+                demandeur.nom_complet or ''
+            ),
+        }
+        # Adresse : depuis le profil si vide
+        if not data.get('adresse'):
+            extra['adresse'] = getattr(demandeur, 'adresse_siege', '') or ''
+
+        demande = serializer.save(**extra)
 
         # ── Notifier le Secrétariat DGI dès la soumission ───────
         try:
@@ -791,7 +809,7 @@ class DemandeViewSet(viewsets.ModelViewSet):
                 'email':                  dem.demandeur.email,
                 'adresse':                getattr(dem.demandeur, 'adresse_siege', '') or dem.adresse or '',
                 'forme_juridique':        getattr(dem.demandeur, 'forme_juridique', '') or '',
-                'nom_etablissement':      dem.raison_sociale or dem.demandeur.nom_entreprise or '',
+                'nom_etablissement':      dem.demandeur.nom_entreprise or dem.raison_sociale or '',
                 'type_activite':          dem.activite or '',
                 'wilaya':                 dem.wilaya or '',
                 'adresse_local':          dem.adresse or '',
@@ -881,9 +899,18 @@ class DemandeViewSet(viewsets.ModelViewSet):
             return Response({'detail': 'Aucun fichier fourni.'}, status=400)
 
         from api.models import PieceJointe
+        import re as _re
+        # Nettoyer le nom : enlever suffixe _file, remplacer _ par espaces, capitaliser
+        raw_nom = piece_nom or fichier.name
+        nom_propre = _re.sub(r'_file$', '', raw_nom, flags=_re.IGNORECASE)
+        nom_propre = nom_propre.replace('_', ' ').title()
+        # Si ça ressemble à un nom de fichier original (ex: "mon_document.pdf"), garder tel quel
+        if '.' in fichier.name and len(fichier.name) < 100:
+            nom_propre = nom_propre or fichier.name
+
         pj = PieceJointe.objects.create(
             demande      = demande,
-            nom_original = piece_nom or fichier.name,
+            nom_original = nom_propre or fichier.name,
             fichier      = fichier,
             taille_ko    = fichier.size // 1024,
         )
@@ -1219,14 +1246,14 @@ class LoginAgentView(generics.GenericAPIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email    = request.data.get('email', '').strip().lower()
+        email    = request.data.get('email', '').strip()
         password = request.data.get('password', '')
 
         if not email or not password:
             return Response({'detail': 'Email et mot de passe obligatoires.'}, status=400)
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email)
         except User.DoesNotExist:
             return Response({'detail': 'Email ou mot de passe incorrect.'}, status=401)
 
@@ -1720,11 +1747,16 @@ class AdminDocumentView(generics.GenericAPIView):
 
     def post(self, request):
         from api.models import DocumentPublic
+        # Convertir publie en bool (le frontend envoie "true"/"false" en string via FormData)
+        publie_val = request.data.get('publie', False)
+        if isinstance(publie_val, str):
+            publie_val = publie_val.lower() in ('true', '1', 'yes')
+
         doc = DocumentPublic.objects.create(
             titre=request.data.get('titre', ''),
             categorie=request.data.get('categorie', 'ANNEXE'),
             fichier=request.FILES.get('fichier'),
-            publie=request.data.get('publie', False),
+            publie=publie_val,
             created_by=request.user,
         )
         return Response({'id': doc.id, 'titre': doc.titre}, status=201)
@@ -1935,6 +1967,116 @@ class QuittanceBPView(generics.GenericAPIView):
         return Response({'message': 'Quittance enregistrée.', 'etape_id': etape.id})
 
 
+class ExportDemandesView(generics.GenericAPIView):
+    """
+    GET /api/export/demandes/?format=csv|excel&statut=...&type=...&annee=...
+    Export Excel/CSV de toutes les demandes — tableau de bord analytique.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import csv, io
+        from django.http import HttpResponse
+        from api.models import Demande
+
+        fmt    = request.query_params.get('format', 'excel')
+        statut = request.query_params.get('statut')
+        type_d = request.query_params.get('type')
+        annee  = request.query_params.get('annee')
+        wilaya = request.query_params.get('wilaya')
+
+        qs = Demande.objects.select_related(
+            'demandeur', 'type_demande'
+        ).order_by('-date_soumission')
+
+        if statut: qs = qs.filter(statut=statut)
+        if type_d: qs = qs.filter(type_demande__code=type_d)
+        if annee:  qs = qs.filter(date_soumission__year=annee)
+        if wilaya: qs = qs.filter(wilaya=wilaya)
+
+        HEADERS = [
+            'N° Référence', 'Type de demande', 'Statut', 'Entreprise',
+            'Activité', 'Wilaya', 'Adresse', 'Demandeur',
+            'Email demandeur', 'Téléphone', 'Date soumission', 'Date MAJ',
+        ]
+
+        def row(d):
+            return [
+                d.numero_ref,
+                d.type_demande.libelle if d.type_demande else '',
+                d.statut,
+                d.demandeur.nom_entreprise if d.demandeur else d.raison_sociale,
+                d.activite or '',
+                d.wilaya or '',
+                d.adresse or '',
+                d.demandeur.nom_complet if d.demandeur else '',
+                d.demandeur.email if d.demandeur else '',
+                getattr(d.demandeur, 'telephone', '') or '',
+                d.date_soumission.strftime('%d/%m/%Y %H:%M') if d.date_soumission else '',
+                d.date_maj.strftime('%d/%m/%Y %H:%M') if d.date_maj else '',
+            ]
+
+        if fmt == 'csv':
+            response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+            response['Content-Disposition'] = 'attachment; filename="demandes_mmi.csv"'
+            writer = csv.writer(response)
+            writer.writerow(HEADERS)
+            for d in qs:
+                writer.writerow(row(d))
+            return response
+
+        # Excel
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.utils import get_column_letter
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Demandes MMI"
+
+            # Titre
+            ws.merge_cells(f'A1:{get_column_letter(len(HEADERS))}1')
+            ws['A1'] = "MINISTÈRE DES MINES ET DE L'INDUSTRIE — Export Demandes Industrielles"
+            ws['A1'].font = Font(bold=True, size=13, color='FFFFFF')
+            ws['A1'].fill = PatternFill('solid', fgColor='1B6B30')
+            ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+            ws.row_dimensions[1].height = 28
+
+            # En-têtes
+            for col_idx, h in enumerate(HEADERS, 1):
+                cell = ws.cell(row=2, column=col_idx, value=h)
+                cell.fill = PatternFill('solid', fgColor='2E8B45')
+                cell.font = Font(bold=True, color='FFFFFF', size=10)
+                cell.alignment = Alignment(horizontal='center', wrap_text=True)
+                ws.column_dimensions[get_column_letter(col_idx)].width = max(14, len(h) + 2)
+            ws.row_dimensions[2].height = 32
+
+            # Données
+            alt_fill = PatternFill('solid', fgColor='F0FFF4')
+            for row_idx, d in enumerate(qs, 3):
+                for col_idx, val in enumerate(row(d), 1):
+                    cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                    cell.alignment = Alignment(vertical='top')
+                    if row_idx % 2 == 0:
+                        cell.fill = alt_fill
+
+            ws.freeze_panes = 'A3'
+            ws.auto_filter.ref = f"A2:{get_column_letter(len(HEADERS))}2"
+
+            buf = io.BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+            response = HttpResponse(
+                buf.read(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = 'attachment; filename="demandes_mmi.xlsx"'
+            return response
+        except ImportError:
+            return Response({'detail': 'openpyxl manquant. Utilisez format=csv'}, status=501)
+
+
 class PVComiteBPView(generics.GenericAPIView):
     """
     POST /api/demandes/{id}/pv-comite-bp/
@@ -2074,6 +2216,116 @@ class QuittancePaiementView(generics.GenericAPIView):
             message=f'Votre demande {demande.numero_ref} a recu un accord de principe apres validation du comite BP et reception de votre quittance de paiement.',
         )
         return Response({'message': 'Quittance deposee — Accord de principe accorde.', 'statut': 'ACCORD_PRINCIPE'})
+
+
+class ExportDemandesView(generics.GenericAPIView):
+    """
+    GET /api/export/demandes/?format=csv|excel&statut=...&type=...&annee=...
+    Export Excel/CSV de toutes les demandes — tableau de bord analytique.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        import csv, io
+        from django.http import HttpResponse
+        from api.models import Demande
+
+        fmt    = request.query_params.get('format', 'excel')
+        statut = request.query_params.get('statut')
+        type_d = request.query_params.get('type')
+        annee  = request.query_params.get('annee')
+        wilaya = request.query_params.get('wilaya')
+
+        qs = Demande.objects.select_related(
+            'demandeur', 'type_demande'
+        ).order_by('-date_soumission')
+
+        if statut: qs = qs.filter(statut=statut)
+        if type_d: qs = qs.filter(type_demande__code=type_d)
+        if annee:  qs = qs.filter(date_soumission__year=annee)
+        if wilaya: qs = qs.filter(wilaya=wilaya)
+
+        HEADERS = [
+            'N° Référence', 'Type de demande', 'Statut', 'Entreprise',
+            'Activité', 'Wilaya', 'Adresse', 'Demandeur',
+            'Email demandeur', 'Téléphone', 'Date soumission', 'Date MAJ',
+        ]
+
+        def row(d):
+            return [
+                d.numero_ref,
+                d.type_demande.libelle if d.type_demande else '',
+                d.statut,
+                d.demandeur.nom_entreprise if d.demandeur else d.raison_sociale,
+                d.activite or '',
+                d.wilaya or '',
+                d.adresse or '',
+                d.demandeur.nom_complet if d.demandeur else '',
+                d.demandeur.email if d.demandeur else '',
+                getattr(d.demandeur, 'telephone', '') or '',
+                d.date_soumission.strftime('%d/%m/%Y %H:%M') if d.date_soumission else '',
+                d.date_maj.strftime('%d/%m/%Y %H:%M') if d.date_maj else '',
+            ]
+
+        if fmt == 'csv':
+            response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+            response['Content-Disposition'] = 'attachment; filename="demandes_mmi.csv"'
+            writer = csv.writer(response)
+            writer.writerow(HEADERS)
+            for d in qs:
+                writer.writerow(row(d))
+            return response
+
+        # Excel
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.utils import get_column_letter
+
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Demandes MMI"
+
+            # Titre
+            ws.merge_cells(f'A1:{get_column_letter(len(HEADERS))}1')
+            ws['A1'] = "MINISTÈRE DES MINES ET DE L'INDUSTRIE — Export Demandes Industrielles"
+            ws['A1'].font = Font(bold=True, size=13, color='FFFFFF')
+            ws['A1'].fill = PatternFill('solid', fgColor='1B6B30')
+            ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+            ws.row_dimensions[1].height = 28
+
+            # En-têtes
+            for col_idx, h in enumerate(HEADERS, 1):
+                cell = ws.cell(row=2, column=col_idx, value=h)
+                cell.fill = PatternFill('solid', fgColor='2E8B45')
+                cell.font = Font(bold=True, color='FFFFFF', size=10)
+                cell.alignment = Alignment(horizontal='center', wrap_text=True)
+                ws.column_dimensions[get_column_letter(col_idx)].width = max(14, len(h) + 2)
+            ws.row_dimensions[2].height = 32
+
+            # Données
+            alt_fill = PatternFill('solid', fgColor='F0FFF4')
+            for row_idx, d in enumerate(qs, 3):
+                for col_idx, val in enumerate(row(d), 1):
+                    cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                    cell.alignment = Alignment(vertical='top')
+                    if row_idx % 2 == 0:
+                        cell.fill = alt_fill
+
+            ws.freeze_panes = 'A3'
+            ws.auto_filter.ref = f"A2:{get_column_letter(len(HEADERS))}2"
+
+            buf = io.BytesIO()
+            wb.save(buf)
+            buf.seek(0)
+            response = HttpResponse(
+                buf.read(),
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = 'attachment; filename="demandes_mmi.xlsx"'
+            return response
+        except ImportError:
+            return Response({'detail': 'openpyxl manquant. Utilisez format=csv'}, status=501)
 
 
 class PVComiteBPView(generics.GenericAPIView):
