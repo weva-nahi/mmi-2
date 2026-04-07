@@ -160,7 +160,6 @@ export default function FormulaireRenouvellement() {
     try {
       const { data: res } = await demandesAPI.create({
         type_demande_code: 'RENOUVELLEMENT',
-        raison_sociale:    form.denomination_complete,
         activite:          form.activite_principale,
         adresse:           form.localisation_siege,
         wilaya:            '',

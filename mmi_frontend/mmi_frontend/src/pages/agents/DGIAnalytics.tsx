@@ -74,6 +74,30 @@ export default function DGIAnalytics() {
 
   useEffect(() => { load() }, [])
 
+  const handleExportDemandes = async () => {
+    try {
+      const res = await analyticsAPI.exportDemandes()
+      const url  = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'demandes_mmi.xlsx'
+      link.click()
+      window.URL.revokeObjectURL(url)
+      toast.success('Export Excel téléchargé !')
+    } catch {
+      toast.error("Erreur lors de l'export")
+    }
+  }
+
+  const handleExportPDF = () => {
+    // Export PDF via impression navigateur — génère un PDF de la page visible
+    const style = document.createElement('style')
+    style.textContent = '@media print { .no-print { display: none !important; } thead { background: #1B6B30 !important; -webkit-print-color-adjust: exact; } }'
+    document.head.appendChild(style)
+    window.print()
+    setTimeout(() => document.head.removeChild(style), 1000)
+  }
+
   const handleExport = async (fmt: 'csv' | 'excel') => {
     setExporting(fmt)
     try {
@@ -141,10 +165,20 @@ export default function DGIAnalytics() {
           <p className="text-sm text-gray-500 mt-0.5">Direction Générale de l'Industrie</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={load}
-                  className="flex items-center gap-1.5 text-sm text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50">
-            <RefreshCw size={14} /> Actualiser
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleExportPDF}
+                    className="flex items-center gap-1.5 text-sm text-red-600 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50">
+              <Download size={14} /> PDF
+            </button>
+            <button onClick={() => handleExportDemandes()}
+                    className="flex items-center gap-1.5 text-sm text-emerald-700 border border-emerald-200 px-3 py-1.5 rounded-lg hover:bg-emerald-50">
+              <FileSpreadsheet size={14} /> Export Excel
+            </button>
+            <button onClick={load}
+                    className="flex items-center gap-1.5 text-sm text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+              <RefreshCw size={14} /> Actualiser
+            </button>
+          </div>
         </div>
       </div>
 
@@ -313,6 +347,10 @@ export default function DGIAnalytics() {
                 ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                 : <FileSpreadsheet size={14} />}
               Excel
+            </button>
+            <button onClick={handleExportPDF} disabled={!!exporting}
+                    className="flex items-center gap-1.5 text-sm bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50">
+              <Download size={14} /> PDF
             </button>
           </div>
 

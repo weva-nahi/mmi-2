@@ -16,7 +16,8 @@ export default function FormulaireUsineEau() {
     activite_principale:    '',
     longitude:              '',
     latitude:               '',
-  })
+    adresse: '',
+    wilaya:  '',})
 
   const [files, setFiles] = useState<Record<string, File | null>>({
     // Dossier juridique
@@ -79,9 +80,8 @@ export default function FormulaireUsineEau() {
     try {
       const { data: res } = await demandesAPI.create({
         type_demande_code: 'USINE_EAU',
-        raison_sociale:    form.activite_principale,
         activite:          form.activite_principale,
-        adresse: '', wilaya: '',
+        adresse: form.adresse || '', wilaya: form.wilaya || '',
         latitude:  form.latitude  || null,
         longitude: form.longitude || null,
         formulaire_specifique: form,

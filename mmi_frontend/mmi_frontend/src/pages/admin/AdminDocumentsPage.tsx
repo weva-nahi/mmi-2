@@ -330,11 +330,28 @@ function TabProjets() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving]     = useState(false)
   const [search, setSearch]     = useState('')
-  const [fichier, setFichier]   = useState<File | null>(null)
+  const [fichier, setFichier]     = useState<File | null>(null)
+  const [projetASupprimer, setProjetASupprimer] = useState<Projet | null>(null)
+  const [supprimant, setSupprimant] = useState(false)
   const [form, setForm] = useState({
     titre: '', secteur: '', description: '',
     budget_estime: '', statut: 'ouvert', publie: false
   })
+
+  const handleDeleteProjet = async () => {
+    if (!projetASupprimer) return
+    setSupprimant(true)
+    try {
+      await api.delete('/public/projets/' + projetASupprimer.id + '/')
+      toast.success('Projet supprimé avec succès')
+      setProjetASupprimer(null)
+      load()
+    } catch {
+      toast.error('Erreur lors de la suppression')
+    } finally {
+      setSupprimant(false)
+    }
+  }
 
   const load = () => {
     setLoading(true)
@@ -548,7 +565,8 @@ function TabProjets() {
                           </a>
                         )}
                         <button className="p-1.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"
-                                onClick={() => toast('Supprimer ce projet ?', { icon: '⚠️' })}>
+                                title="Supprimer ce projet"
+                                onClick={() => setProjetASupprimer(p)}>
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -558,6 +576,53 @@ function TabProjets() {
               </tbody>
             </table>
             <p className="text-xs text-gray-400 p-3 text-right">{projetsFiltres.length} projet(s)</p>
+
+      {/* ── Modal confirmation suppression ── */}
+      {projetASupprimer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center"
+             style={{ background: 'rgba(0,0,0,0.45)' }}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 border border-gray-100">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-11 h-11 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <Trash2 size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800 text-sm">Confirmer la suppression</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Cette action est irréversible</p>
+              </div>
+            </div>
+            <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-5">
+              <p className="text-sm text-gray-700">
+                Vous allez supprimer définitivement le projet :
+              </p>
+              <p className="font-bold text-red-700 text-sm mt-1 truncate">
+                {projetASupprimer.titre}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setProjetASupprimer(null)}
+                className="flex-1 py-2.5 rounded-xl font-semibold text-gray-600 text-sm
+                           bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleDeleteProjet}
+                disabled={supprimant}
+                className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm
+                           bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-60
+                           flex items-center justify-center gap-2"
+              >
+                {supprimant
+                  ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  : <><Trash2 size={14} /> Supprimer</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
           </div>
         )}
       </div>

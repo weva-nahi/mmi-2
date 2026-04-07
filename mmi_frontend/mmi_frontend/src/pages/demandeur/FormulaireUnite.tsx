@@ -34,7 +34,8 @@ export default function FormulaireUnite() {
     sous_secteur:           '',
     activite_principale:    '',
     filieres:               '',
-  })
+    adresse:                '',
+    wilaya:                 '',})
 
   const [files, setFiles] = useState<Record<string, File | null>>({
     // Dossier juridique
@@ -96,9 +97,8 @@ export default function FormulaireUnite() {
     try {
       const { data: res } = await demandesAPI.create({
         type_demande_code: 'UNITE',
-        raison_sociale:    form.activite_principale,
         activite:          form.activite_principale,
-        adresse: '', wilaya: '',
+        adresse: form.adresse || '', wilaya: form.wilaya || '',
         latitude:  form.latitude  || null,
         longitude: form.longitude || null,
         formulaire_specifique: form,

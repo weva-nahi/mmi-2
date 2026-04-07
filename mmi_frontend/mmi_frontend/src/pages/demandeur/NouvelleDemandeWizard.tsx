@@ -20,7 +20,7 @@ export default function NouvelleDemandeWizard() {
   const [files, setFiles]             = useState<Record<number, File>>({})
 
   const [form, setForm] = useState({
-    raison_sociale: user?.nom_entreprise || '',
+    raison_sociale: '',
     activite: '',
     adresse: '',
     wilaya: '',
@@ -37,8 +37,14 @@ export default function NouvelleDemandeWizard() {
     typeDemandesAPI.list()
       .then(r => {
         const data = r.data.results || r.data
-        setTypes(data)
-        setTypesLoading(false)
+        if (data && data.length > 0) {
+          setTypes(data)
+          setTypesLoading(false)
+        } else {
+          // BD vide — setup_db.py pas encore lancé
+          setTypesError(true)
+          setTypesLoading(false)
+        }
       })
       .catch(() => {
         setTypesError(true)
@@ -78,7 +84,6 @@ export default function NouvelleDemandeWizard() {
     try {
       const { data } = await demandesAPI.create({
         type_demande_id: typeChoisi.id,
-        raison_sociale: form.raison_sociale,
         activite: form.activite,
         adresse: form.adresse,
         wilaya: form.wilaya,
@@ -107,12 +112,12 @@ export default function NouvelleDemandeWizard() {
     'Inchiri','Nouakchott Nord','Nouakchott Ouest','Nouakchott Sud',
   ]
 
-  const TYPES_LABELS: Record<string, { color: string; desc: string; emoji?: string }> = {
-    BP:             { color: '#f97316', desc: 'Boulangerie, pâtisserie, confiserie', emoji: '🥖' },
-    USINE_EAU:      { color: '#0ea5e9', desc: 'Production d\'eau minérale embouteillée', emoji: '💧' },
-    UNITE:          { color: '#1B6B30', desc: 'Usine, manufacture, unité de production', emoji: '🏭' },
-    RENOUVELLEMENT: { color: '#7c3aed', desc: 'Renouvellement d\'enregistrement industriel', emoji: '🔁' },
-    EXTENSION:      { color: '#c2410c', desc: 'Agrandissement d\'une unité existante', emoji: '📐' },
+  const TYPES_LABELS: Record<string, { color: string; desc: string; emoji: string }> = {
+    BP:             { color: '#f97316', desc: 'Boulangerie, pâtisserie, confiserie',          emoji: '🥖' },
+    USINE_EAU:      { color: '#0ea5e9', desc: 'Production d\'eau minérale embouteillée',      emoji: '💧' },
+    UNITE:          { color: '#1B6B30', desc: 'Usine, manufacture, unité de production',       emoji: '🏭' },
+    RENOUVELLEMENT: { color: '#7c3aed', desc: 'Renouvellement d\'enregistrement industriel',  emoji: '🔄' },
+    EXTENSION:      { color: '#c2410c', desc: 'Agrandissement d\'une unité existante',        emoji: '📐' },
   }
 
   return (
@@ -155,71 +160,72 @@ export default function NouvelleDemandeWizard() {
 
             {/* Erreur de connexion backend */}
             {typesError && (
-              <div className="text-center py-10">
-                <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl">⚠️</span>
-                </div>
-                <p className="font-semibold text-gray-700 mb-1">Impossible de charger les types de demande</p>
-                <p className="text-sm text-gray-500 mb-4">
-                  Le serveur backend n'est pas accessible.<br />
-                  Assurez-vous que Django tourne sur <code className="bg-gray-100 px-1 rounded">http://localhost:8000</code>
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
+                <div className="text-3xl mb-3">⚙️</div>
+                <p className="font-bold text-amber-800 mb-2">Base de données non initialisée</p>
+                <p className="text-sm text-amber-700 mb-4">
+                  Les types de demande ne sont pas encore configurés.<br/>
+                  Lancez la commande suivante dans le dossier backend :
                 </p>
+                <div className="bg-gray-900 text-green-400 text-xs font-mono rounded-lg p-3 text-left mb-4 mx-auto max-w-xs">
+                  <p>cd mmi_backend</p>
+                  <p>python setup_db.py</p>
+                </div>
                 <button
                   onClick={() => {
                     setTypesError(false)
                     setTypesLoading(true)
                     typeDemandesAPI.list()
-                      .then(r => { setTypes(r.data.results || r.data); setTypesLoading(false) })
+                      .then(r => {
+                        const data = r.data.results || r.data
+                        if (data && data.length > 0) { setTypes(data); setTypesLoading(false) }
+                        else { setTypesError(true); setTypesLoading(false) }
+                      })
                       .catch(() => { setTypesError(true); setTypesLoading(false) })
                   }}
                   className="btn-primary text-sm"
                 >
-                  🔄 Réessayer
+                  🔄 Réessayer après initialisation
                 </button>
               </div>
             )}
 
             {/* Types chargés depuis la BD */}
             {!typesLoading && !typesError && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {types.map(t => {
-                const info = TYPES_LABELS[t.code] || { color: '#888', desc: '', emoji: '📋' }
-                const isSelected = typeChoisi?.id === t.id
-                return (
-                  <button
-                    key={t.id}
-                    onClick={() => setTypeChoisi(t)}
-                    className={`p-5 rounded-xl border-2 text-left transition-all hover:shadow-md group
-                      ${isSelected
-                        ? 'border-2 bg-white shadow-md scale-[1.02]'
-                        : 'border-gray-200 hover:border-gray-300 bg-white'}`}
-                    style={{ borderColor: isSelected ? info.color : undefined }}
-                  >
-                    {/* Icône */}
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-3 transition-all"
-                         style={{ background: isSelected ? info.color + '20' : '#f3f4f6' }}>
-                      {info.emoji}
-                    </div>
-                    {/* Titre */}
-                    <p className="font-bold text-sm text-gray-800 mb-1 leading-snug">{t.libelle}</p>
-                    {/* Description */}
-                    <p className="text-xs text-gray-500 leading-relaxed">{info.desc}</p>
-                    {/* Badge sélectionné */}
-                    {isSelected && (
-                      <div className="flex items-center gap-1 mt-3 text-xs font-semibold"
-                           style={{ color: info.color }}>
-                        <CheckCircle size={13} />
-                        Sélectionné
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {types.map(t => {
+                  const info = TYPES_LABELS[t.code] || { color: '#888', desc: '', emoji: '📋' }
+                  const isSelected = typeChoisi?.id === t.id
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => setTypeChoisi(t)}
+                      className={`p-5 rounded-xl border-2 text-left transition-all hover:shadow-md group
+                        ${isSelected
+                          ? 'border-2 bg-white shadow-md scale-[1.02]'
+                          : 'border-gray-200 hover:border-gray-300 bg-white'}`}
+                      style={{ borderColor: isSelected ? info.color : undefined }}
+                    >
+                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-3 transition-all"
+                           style={{ background: isSelected ? info.color + '20' : '#f3f4f6' }}>
+                        {info.emoji}
                       </div>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-              
+                      <p className="font-bold text-sm text-gray-800 mb-1 leading-snug">{t.libelle}</p>
+                      <p className="text-xs text-gray-500 leading-relaxed">{info.desc}</p>
+                      {isSelected && (
+                        <div className="flex items-center gap-1 mt-3 text-xs font-semibold"
+                             style={{ color: info.color }}>
+                          <CheckCircle size={13} />
+                          Sélectionné
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             )}
 
-          <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex justify-end">
               {typeChoisi?.code === 'BP' ? (
                 <button onClick={() => navigate('/demandeur/formulaire-bp')}
                         className="btn-primary flex items-center gap-2"

@@ -21,7 +21,6 @@ const DGI_MENU = [
 const DGI_SEC_MENU = [
   { to: '/dgi-sec',          icon: Inbox,    label: 'Tableau de bord' },
   { to: '/dgi-sec/dossiers', icon: Printer,  label: 'Dossiers à imprimer' },
-  { to: '/dgi-sec/traites',  icon: CheckSquare, label: 'Dossiers traités' },
 ]
 
 export function DGISecLayout(): JSX.Element {

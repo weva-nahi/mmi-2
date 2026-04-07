@@ -49,7 +49,16 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex flex-col">
-
+       {/* ── HERO BANNER ───────────────────────────────────── */}
+      <div className="w-full overflow-hidden bg-mmi-green" style={{ maxHeight: 320 }}>
+        <img
+          src="/images/banner_mmi.jpg"
+          alt="Ministère des Mines et de l'Industrie"
+          className="w-full h-full object-cover object-center block"
+          style={{ maxHeight: 320 }}
+          onError={e => { e.currentTarget.style.display = 'none' }}
+        />
+      </div>
       {/* ══ FORMULAIRE ══ */}
       <div className="flex-1 flex items-start justify-center px-4 py-10">
         <div className="w-full max-w-md">

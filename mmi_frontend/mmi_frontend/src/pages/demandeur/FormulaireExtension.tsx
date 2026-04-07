@@ -58,7 +58,6 @@ export default function FormulaireExtension() {
     try {
       const { data: res } = await demandesAPI.create({
         type_demande_code:   'EXTENSION',
-        raison_sociale:       autoExistante?.adresse || '',
         adresse:              autoExistante?.adresse || '',
         wilaya:               autoExistante?.wilaya || '',
         activite:             form.nature_extension || '',

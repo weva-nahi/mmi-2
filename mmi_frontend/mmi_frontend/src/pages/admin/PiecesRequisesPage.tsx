@@ -45,7 +45,7 @@ export default function PiecesRequisesPage() {
     try {
       const [tRes, pRes] = await Promise.all([
         api.get('/types-demande/'),
-        api.get('/pieces-requises/'),
+        api.get('/pieces-requises/?page_size=200'),
       ])
       const typesData  = tRes.data.results || tRes.data
       const piecesData = pRes.data.results || pRes.data

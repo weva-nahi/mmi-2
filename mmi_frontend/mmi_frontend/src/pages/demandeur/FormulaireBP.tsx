@@ -14,6 +14,8 @@ export default function FormulaireBP() {
   const [form, setForm] = useState({
     telephone_proprietaire: '',
     activite_principale:    '',
+    adresse:                '',
+    wilaya:                 '',
     longitude:              '',
     latitude:               '',
   })
@@ -76,10 +78,9 @@ export default function FormulaireBP() {
     try {
       const { data: res } = await demandesAPI.create({
         type_demande_code: 'BP',
-        raison_sociale:    form.activite_principale,
         activite:          form.activite_principale,
-        adresse:           '',
-        wilaya:            '',
+        adresse:           form.adresse || '',
+        wilaya:            form.wilaya || '',
         latitude:          form.latitude  || null,
         longitude:         form.longitude || null,
         formulaire_specifique: form,
