@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useNavigate } from 'react-router-dom'
 import { Inbox, FileSignature, BarChart3, PenLine, Send, CheckSquare, ArrowRight, Printer,
          Download, Eye, ArrowLeft, Clock, FileText, User, Hash, Calendar } from 'lucide-react'
 import { demandesAPI } from '@/utils/api'
@@ -19,12 +19,19 @@ const DGI_MENU = [
 
 // ── Menu et Layout Secrétariat DGI ───────────────────────────
 const DGI_SEC_MENU = [
-  { to: '/dgi-sec',          icon: Inbox,    label: 'Tableau de bord' },
-  { to: '/dgi-sec/dossiers', icon: Printer,  label: 'Dossiers à imprimer' },
+  { to: '/dgi-sec',          icon: Inbox,   label: 'Tableau de bord'     },
+  { to: '/dgi-sec/dossiers', icon: Printer, label: 'Dossiers à imprimer' },
 ]
 
 export function DGISecLayout(): JSX.Element {
   return <AgentLayout titre="Secrétariat DGI — Impression" couleur="#6B4A0B" menu={DGI_SEC_MENU} />
+}
+
+// Redirection automatique index → /dossiers
+export function DGISecIndex(): JSX.Element {
+  const navigate = useNavigate()
+  React.useEffect(() => { navigate('/dgi-sec/dossiers', { replace: true }) }, [])
+  return <></>
 }
 
 export function DGISecDashboard(): JSX.Element {
@@ -34,14 +41,20 @@ export function DGISecDashboard(): JSX.Element {
     Promise.all([
       demandesAPI.list({ statut: 'SOUMISE' }),
       demandesAPI.list({ statut: 'EN_RECEPTION' }),
+      demandesAPI.list({ statut: 'PRET_IMPRESSION_DGI' }),
       demandesAPI.list({ statut: 'EN_INSTRUCTION_DGI' }),
       demandesAPI.list({ statut: 'VALIDE' }),
-    ]).then(([a, b, c, d]) => setCounts({
-      nouvelles:    (a.data.results || a.data).length,
-      aImprimer:    (b.data.results || b.data).length,
-      enInstruction:(c.data.results || c.data).length,
-      traites:      (d.data.results || d.data).length,
-    })).catch(() => {})
+    ]).then(([a, b, c, d, e]) => {
+      const soumises    = (a.data.results || a.data).length
+      const enReception = (b.data.results || b.data).length
+      const aImprimer   = (c.data.results || c.data).length
+      setCounts({
+        nouvelles:    soumises + enReception,       // nouveaux dossiers
+        aImprimer:    soumises + enReception + aImprimer, // tous à imprimer
+        enInstruction:(d.data.results || d.data).length,
+        traites:      (e.data.results || e.data).length,
+      })
+    }).catch(() => {})
   }, [])
 
   return (
@@ -54,7 +67,7 @@ export function DGISecDashboard(): JSX.Element {
           { label: 'Nouvelles demandes',     value: counts.nouvelles,     color: 'text-red-600',   bg: 'bg-red-50',   icon: Inbox,       link: '/dgi-sec/dossiers' },
           { label: 'À imprimer',             value: counts.aImprimer,    color: 'text-amber-600', bg: 'bg-amber-50',  icon: Printer,     link: '/dgi-sec/dossiers' },
           { label: 'En instruction',         value: counts.enInstruction, color: 'text-blue-600',  bg: 'bg-blue-50',  icon: PenLine,     link: '/dgi-sec/dossiers' },
-          { label: 'Dossiers traités',       value: counts.traites,       color: 'text-green-600', bg: 'bg-green-50', icon: CheckSquare, link: '/dgi-sec/traites'  },
+
         ].map(s => (
           <div key={s.label} onClick={() => s.link && (window.location.href = s.link)}
                className="card p-5 hover:shadow-md cursor-pointer">
@@ -89,7 +102,7 @@ export function DGISecDossiers(): JSX.Element {
   return (
     <DossiersList
       titre="Dossiers à imprimer — Secrétariat DGI"
-      statutsFiltres={['SOUMISE', 'DEPOSEE', 'EN_RECEPTION', 'EN_INSTRUCTION_DGI']}
+      statutsFiltres={['SOUMISE', 'EN_RECEPTION', 'PRET_IMPRESSION_DGI', 'EN_INSTRUCTION_DGI']}
       linkBase="/dgi-sec/dossier-sec"
     />
   )
@@ -397,7 +410,11 @@ export function DGISecretariatDossier(): JSX.Element {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">
-                      {p.nom_original || p.piece_code || 'Document'}
+                      {/* Nettoyer les noms de code technique → noms lisibles */}
+                      {(p.nom_original || p.piece_code || 'Document')
+                        .replace(/_file$/i, '')
+                        .replace(/_/g, ' ')
+                        .replace(/\w/g, (c: string) => c.toUpperCase())}
                     </p>
                     {p.taille_ko && (
                       <p className="text-xs text-gray-400">{p.taille_ko} Ko</p>

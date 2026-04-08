@@ -54,16 +54,53 @@ export default function NouvelleDemandeWizard() {
 
   const up = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }))
 
+  const [alerteDistance, setAlerteDistance] = useState<string[]>([])
+
+  const verifierDistance = async (lat: number, lng: number) => {
+    if (!typeChoisi || typeChoisi.code !== 'BP') return
+    try {
+      // Vérifier via l'API geojson des autorisations
+      const r = await import('@/utils/api').then(m => m.autorisationsAPI.geojson())
+      const features = r.data.features || []
+      const trop_proches: string[] = []
+
+      const toRad = (v: number) => v * Math.PI / 180
+      const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+        const R = 6371000
+        const dLat = toRad(lat2 - lat1)
+        const dLon = toRad(lon2 - lon1)
+        const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+      }
+
+      for (const f of features) {
+        const [fLon, fLat] = f.geometry?.coordinates || []
+        if (!fLat || !fLon) continue
+        const dist = haversine(lat, lng, fLat, fLon)
+        if (dist < 500) {
+          trop_proches.push(`${f.properties?.nom || f.properties?.numero_ref || 'Établissement'} à ${Math.round(dist)}m`)
+        }
+      }
+      setAlerteDistance(trop_proches)
+      if (trop_proches.length > 0) {
+        toast.error(`⚠️ ${trop_proches.length} boulangerie(s) dans un rayon de 500m !`)
+      }
+    } catch { /* silencieux */ }
+  }
+
   const localiserGPS = () => {
     if (!navigator.geolocation) { toast.error('Géolocalisation non supportée'); return }
     setGpsLoading(true)
     navigator.geolocation.getCurrentPosition(
       pos => {
-        up('latitude', pos.coords.latitude.toFixed(6))
-        up('longitude', pos.coords.longitude.toFixed(6))
+        const lat = pos.coords.latitude
+        const lng = pos.coords.longitude
+        up('latitude', lat.toFixed(6))
+        up('longitude', lng.toFixed(6))
         setGpsPrecision(Math.round(pos.coords.accuracy))
         setGpsLoading(false)
         toast.success('Position capturée !')
+        verifierDistance(lat, lng)
       },
       () => { toast.error('Impossible d\'obtenir la position'); setGpsLoading(false) },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
@@ -311,6 +348,33 @@ export default function NouvelleDemandeWizard() {
         {step === 3 && (
           <div className="animate-fadeInUp">
             <h2 className="font-semibold text-gray-700 mb-5">Localisation GPS</h2>
+
+            {/* Alerte distance 500m */}
+            {alerteDistance.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-red-500 text-xl flex-shrink-0">⚠️</span>
+                  <div>
+                    <p className="font-bold text-red-700 text-sm mb-1">
+                      Alerte — Règle des 500 mètres
+                    </p>
+                    <p className="text-xs text-red-600 mb-2">
+                      {alerteDistance.length} boulangerie(s) déjà autorisée(s) dans un rayon de 500m :
+                    </p>
+                    <ul className="text-xs text-red-700 space-y-0.5">
+                      {alerteDistance.map((a, i) => (
+                        <li key={i} className="flex items-center gap-1">
+                          <span className="text-red-400">•</span> {a}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-xs text-red-500 mt-2 italic">
+                      Votre demande sera soumise mais pourra être rejetée par la DDPI.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 mb-5">
               Cliquez sur le bouton ci-dessous pour capturer automatiquement votre position.
               Assurez-vous d'être sur le site de l'établissement.
