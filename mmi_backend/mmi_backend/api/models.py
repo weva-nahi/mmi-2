@@ -162,6 +162,8 @@ class UserRole(models.Model):
 # ══════════════════════════════════════════════════════════════
 
 class Actualite(models.Model):
+    LANGUES = [('fr','Français'),('en','Anglais'),('ar','Arabe')]
+
     titre            = models.CharField(max_length=255)
     titre_en         = models.CharField(max_length=300, blank=True, default='')
     titre_ar         = models.CharField(max_length=300, blank=True, default='')
@@ -169,6 +171,7 @@ class Actualite(models.Model):
     contenu          = models.TextField()
     contenu_en       = models.TextField(blank=True, default='')
     contenu_ar       = models.TextField(blank=True, default='')
+    langue           = models.CharField(max_length=5, choices=LANGUES, default='fr')
     image            = models.ImageField(upload_to='actualites/', blank=True, null=True)
     publie           = models.BooleanField(default=False)
     auteur           = models.ForeignKey(User, on_delete=models.SET_NULL, null=True,

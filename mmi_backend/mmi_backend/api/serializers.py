@@ -207,7 +207,7 @@ class ActualiteSerializer(serializers.ModelSerializer):
     class Meta:
         model  = Actualite
         fields = ['id', 'titre', 'titre_en', 'titre_ar', 'slug', 'contenu',
-                  'contenu_en', 'contenu_ar', 'image', 'publie',
+                  'contenu_en', 'contenu_ar', 'langue', 'image', 'publie',
                   'auteur_nom', 'date_publication', 'created_at']
         read_only_fields = ['slug', 'created_at']
 

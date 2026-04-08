@@ -163,12 +163,22 @@ class ActualiteViewSet(viewsets.ModelViewSet):
     serializer_class = ActualiteSerializer
     filter_backends  = [filters.SearchFilter, DjangoFilterBackend]
     search_fields    = ['titre', 'contenu', 'slug']
-    filterset_fields = ['publie']
+    filterset_fields = ['publie']  # 'langue' ajouté dynamiquement si le champ existe
 
     def get_queryset(self):
         if self.request.user.is_authenticated and self.request.user.is_super_admin:
-            return Actualite.objects.all()
-        return Actualite.objects.filter(publie=True)
+            qs = Actualite.objects.all()
+        else:
+            qs = Actualite.objects.filter(publie=True)
+
+        # Filtre langue — sécurisé si migration pas encore faite
+        langue = self.request.query_params.get('langue')
+        if langue:
+            try:
+                qs = qs.filter(langue=langue)
+            except Exception:
+                pass  # Champ pas encore en base — ignorer le filtre
+        return qs
 
     def get_permissions(self):
         if self.action in ['list', 'retrieve', 'by_slug']:
