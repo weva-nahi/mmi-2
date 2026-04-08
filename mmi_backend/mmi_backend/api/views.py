@@ -444,8 +444,9 @@ class DemandeViewSet(viewsets.ModelViewSet):
     Le demandeur ne voit que ses propres dossiers.
     Les agents voient tous les dossiers selon leur rôle.
     """
-    filter_backends  = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['statut', 'type_demande__code', 'wilaya']
+    filter_backends  = [filters.SearchFilter, filters.OrderingFilter]
+    # 'statut' géré manuellement dans get_queryset (supporte multi-valeurs via virgule)
+    # 'type_demande__code' et 'wilaya' filtrés dans get_queryset aussi
     search_fields    = ['numero_ref', 'raison_sociale', 'activite']
     ordering_fields  = ['date_soumission', 'date_maj', 'statut']
     ordering         = ['-date_soumission']
@@ -465,11 +466,11 @@ class DemandeViewSet(viewsets.ModelViewSet):
         # Filtrage par rôle + statut pertinent
         FILTRES = {
             'SEC_CENTRAL':     ['SOUMISE', 'EN_RECEPTION'],
-            'DGI_SECRETARIAT': ['SOUMISE', 'DEPOSEE', 'EN_RECEPTION', 'EN_INSTRUCTION_DGI', 'VALIDE', 'REJETEE'],
+            'DGI_SECRETARIAT': ['SOUMISE', 'EN_RECEPTION', 'PRET_IMPRESSION_DGI',
+                                'EN_INSTRUCTION_DGI', 'VALIDE', 'REJETE'],
             'SEC_GENERAL':     ['TRANSMISE_SG', 'EN_LECTURE_SG'],
             'MINISTRE':        ['TRANSMISE_MINISTRE', 'EN_LECTURE_MINISTRE'],
             'DGI_DIRECTEUR':   None,  # voit tout
-            'DGI_SECRETARIAT': ['EN_RECEPTION', 'PRET_IMPRESSION_DGI', 'EN_INSTRUCTION_DGI'],
             'DDPI_DIRECTEUR':  ['EN_TRAITEMENT_DDPI', 'EN_TRAITEMENT_DDPI_BP',
                                  'EN_TRAITEMENT_DDPI_US', 'DOSSIER_INCOMPLET',
                                  'VISITE_PROGRAMMEE', 'EN_COMMISSION_BP',
@@ -492,12 +493,27 @@ class DemandeViewSet(viewsets.ModelViewSet):
         for role, statuts in FILTRES.items():
             if user.has_role(role):
                 if statuts is None:
-                    return qs.all()  # pas de filtre
-                # Filtre par statut + accès aux dossiers traités (historique)
+                    qs_role = qs.all()  # DGI_DIRECTEUR voit tout
+                else:
+                    qs_role = qs.filter(statut__in=statuts)
+
+                # Filtre additionnel par statut(s) depuis les query params
+                # Supporte ?statut=X (un seul) ou ?statut=X,Y,Z (plusieurs)
                 statut_param = self.request.query_params.get('statut')
                 if statut_param:
-                    return qs.filter(statut=statut_param)
-                return qs.all()  # agents voient tout mais filtre côté frontend
+                    statuts_demandes = [s.strip() for s in statut_param.split(',') if s.strip()]
+                    if len(statuts_demandes) == 1:
+                        qs_role = qs_role.filter(statut=statuts_demandes[0])
+                    else:
+                        qs_role = qs_role.filter(statut__in=statuts_demandes)
+                # Filtres additionnels
+                wilaya_param = self.request.query_params.get('wilaya')
+                type_param   = self.request.query_params.get('type_demande__code')
+                if wilaya_param:
+                    qs_role = qs_role.filter(wilaya=wilaya_param)
+                if type_param:
+                    qs_role = qs_role.filter(type_demande__code=type_param)
+                return qs_role
 
         # Par défaut — tous les agents voient tout
         return qs.all()
@@ -590,6 +606,43 @@ class DemandeViewSet(viewsets.ModelViewSet):
                         recipient_list=[dest.email],
                         fail_silently=True,
                     )
+
+            # ── Notifier aussi le DGI_DIRECTEUR ──────────────────
+            titre_dgi   = f"Nouveau dossier reçu au Secrétariat DGI — {demande.numero_ref}"
+            message_dgi = (
+                f"Une nouvelle demande a été soumise et transmise au Secrétariat DGI pour impression.\n"
+                f"Référence  : {demande.numero_ref}\n"
+                f"Type       : {demande.type_demande.libelle}\n"
+                f"Demandeur  : {demande.demandeur.nom_complet}\n\n"
+                f"Le Secrétariat procédera à l'impression du dossier pour le circuit papier."
+            )
+            dgi_ids = UserRole.objects.filter(
+                role__code='DGI_DIRECTEUR', actif=True
+            ).values_list('user_id', flat=True)
+            dgi_users = User.objects.filter(id__in=dgi_ids, is_active=True)
+
+            for dest in dgi_users:
+                Notif.objects.create(
+                    destinataire=dest,
+                    demande=demande,
+                    type_notif='INFO',
+                    titre=titre_dgi,
+                    message=message_dgi,
+                )
+                if dest.email:
+                    send_mail(
+                        subject=f"[MMI] {titre_dgi}",
+                        message=(
+                            f"Bonjour {dest.nom_complet},\n\n"
+                            f"{message_dgi}\n\n"
+                            f"Vous pouvez suivre l'avancement sur la plateforme.\n\n"
+                            f"Cordialement,\nPlateforme MMIAPP"
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[dest.email],
+                        fail_silently=True,
+                    )
+
         except Exception:
             pass  # Ne jamais bloquer la soumission si la notif échoue
 
