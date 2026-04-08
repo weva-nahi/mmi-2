@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n/i18n'
+
+function getLang(obj: any, field: string): string {
+  const lang = i18n.language
+  if (lang === 'ar' && obj?.[field + '_ar']) return obj[field + '_ar']
+  if (lang === 'en' && obj?.[field + '_en']) return obj[field + '_en']
+  return obj?.[field] || ''
+}
 import { Link } from 'react-router-dom'
 import { Calendar, ChevronRight, ChevronLeft, Search, FileText } from 'lucide-react'
 import { portailAPI } from '@/utils/api'
@@ -8,6 +16,10 @@ import HeroBanner from '@/components/ui/HeroBanner'
 interface Actualite {
   id: number
   titre: string
+  titre_en?: string
+  titre_ar?: string
+  contenu_en?: string
+  contenu_ar?: string
   slug: string
   contenu: string
   image: string
@@ -16,7 +28,7 @@ interface Actualite {
 }
 
 export default function ActualitesPage() {
-  const { t } = useTranslation()
+  const { t, i18n: _i18n } = useTranslation()  // _i18n déclenche re-render au changement de langue
   const [articles, setArticles] = useState<Actualite[]>([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
@@ -26,7 +38,7 @@ export default function ActualitesPage() {
 
   useEffect(() => {
     setLoading(true)
-    portailAPI.actualites({ page, page_size: PAGE_SIZE, search: search || undefined })
+    portailAPI.actualites({ page, page_size: PAGE_SIZE, search: search || undefined, langue: _i18n.language })
       .then(r => {
         setArticles(r.data.results || r.data)
         setTotal(r.data.count || (r.data.results || r.data).length)

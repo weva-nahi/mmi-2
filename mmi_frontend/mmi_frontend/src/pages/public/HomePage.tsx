@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n/i18n'
+
+/** Retourne le titre/contenu dans la langue active, avec fallback FR */
+function getLang(obj: any, field: string): string {
+  const lang = i18n.language
+  if (lang === 'ar' && obj?.[field + '_ar']) return obj[field + '_ar']
+  if (lang === 'en' && obj?.[field + '_en']) return obj[field + '_en']
+  return obj?.[field] || ''
+}
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { BarChart3, ChevronRight, Calendar, ArrowRight, FileText, Scale, Briefcase } from 'lucide-react'
 import { portailAPI, autorisationsAPI } from '@/utils/api'
@@ -95,7 +104,7 @@ function ScrollWheelGuard() {
 }
 
 export default function HomePage() {
-  const { t } = useTranslation()
+  const { t, i18n: _i18n } = useTranslation()  // re-render au changement de langue
   const [actualites, setActualites] = useState<Actualite[]>([])
   const [features, setFeatures]     = useState<GeoFeature[]>([])
   const [stats, setStats]           = useState<Stats | null>(null)
@@ -104,20 +113,38 @@ export default function HomePage() {
   const [filtreType, setFiltreType] = useState<FiltreType>('tous')
 
   useEffect(() => {
-    const load = async () => {
+    // Charger chaque section indépendamment — un échec ne bloque pas les autres
+    const loadActualites = async () => {
       try {
-        const [actRes, geoRes, statsRes] = await Promise.all([
-          portailAPI.actualites({ page_size: 6 }),
-          autorisationsAPI.geojson(),
-          autorisationsAPI.stats(),
-        ])
-        setActualites(actRes.data.results || actRes.data)
-        setFeatures(geoRes.data.features || [])
-        setStats(statsRes.data)
-      } catch { /* backend pas encore lancé */ }
+        // Essayer avec filtre langue, fallback sans filtre si 500
+        let res
+        try {
+          res = await portailAPI.actualites({ page_size: 6, langue: i18n.language })
+        } catch {
+          res = await portailAPI.actualites({ page_size: 6 })
+        }
+        setActualites(res.data.results || res.data)
+      } catch { /* silencieux */ }
+    }
+
+    const loadGeo = async () => {
+      try {
+        const res = await autorisationsAPI.geojson()
+        setFeatures(res.data.features || [])
+      } catch { /* silencieux */ }
+    }
+
+    const loadStats = async () => {
+      try {
+        const res = await autorisationsAPI.stats()
+        setStats(res.data)
+      } catch { /* silencieux */ }
       finally { setLoading(false) }
     }
-    load()
+
+    loadActualites()
+    loadGeo()
+    loadStats()
   }, [])
 
   const usines       = stats?.par_type.find(p => p.type === 'UNITE' || p.type === 'USINE_EAU')?.count ?? 0
@@ -175,7 +202,7 @@ export default function HomePage() {
               <article key={actu.id} className={`card animate-fadeInUp stagger-${Math.min(i+1,3)}`}>
                 <div className="h-44 bg-gray-100 rounded-t-xl overflow-hidden">
                   {actu.image ? (
-                    <img src={actu.image} alt={actu.titre} className="w-full h-full object-cover" />
+                    <img src={actu.image} alt={getLang(actu, 'titre')} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-mmi-green-lt">
                       <FileText size={40} className="text-mmi-green opacity-30" />
@@ -190,7 +217,7 @@ export default function HomePage() {
                     })}
                   </div>
                   <h3 className="font-semibold text-gray-800 text-sm leading-snug mb-3 line-clamp-2">
-                    {actu.titre}
+                    {getLang(actu, 'titre')}
                   </h3>
                   <Link to={`/actualites/${actu.slug}`}
                         className="text-mmi-green text-xs font-medium flex items-center gap-1 hover:gap-2 transition-all">
@@ -367,11 +394,19 @@ function DocumentSection({ categorie }: { categorie: 'JURIDIQUE' | 'PROJET' | 'A
   useEffect(() => {
     setLoading(true)
     setItems([])
-    const fetch = categorie === 'PROJET'
-      ? portailAPI.projets({})
-      : portailAPI.documents({ categorie })
-    fetch
-      .then(r => setItems(r.data.results || r.data))
+    const fetchDocs = async () => {
+      if (categorie === 'PROJET') {
+        const r = await portailAPI.projets({})
+        return r.data.results || r.data
+      }
+      // Filtrer par langue active — si aucun résultat, ne rien afficher
+      const lang = i18n.language
+      const r = await portailAPI.documents({ categorie, langue: lang })
+      return r.data.results || r.data
+    }
+
+    fetchDocs()
+      .then(items => setItems(items))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [categorie])

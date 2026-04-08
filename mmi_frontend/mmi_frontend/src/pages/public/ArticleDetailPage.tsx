@@ -1,4 +1,13 @@
 import React, { useEffect, useState } from 'react'
+import i18n from '@/i18n/i18n'
+
+function getLang(obj: any, field: string): string {
+  const lang = i18n.language
+  if (lang === 'ar' && obj?.[field + '_ar']) return obj[field + '_ar']
+  if (lang === 'en' && obj?.[field + '_en']) return obj[field + '_en']
+  return obj?.[field] || ''
+}
+
 import { useParams, Link } from 'react-router-dom'
 import { Calendar, ArrowLeft, ChevronRight, FileText, Share2 } from 'lucide-react'
 import { portailAPI } from '@/utils/api'
@@ -6,6 +15,10 @@ import { portailAPI } from '@/utils/api'
 interface Article {
   id: number
   titre: string
+  titre_en?: string
+  titre_ar?: string
+  contenu_en?: string
+  contenu_ar?: string
   slug: string
   contenu: string
   image: string
