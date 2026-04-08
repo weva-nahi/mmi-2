@@ -62,7 +62,14 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
     if (!id) return
     demandesAPI.get(Number(id))
       .then(r => setDemande(r.data))
-      .catch(() => toast.error('Erreur de chargement'))
+      .catch((err) => {
+        if (err?.response?.status === 404) {
+          toast.error("Ce dossier n'existe plus ou a été supprimé.")
+          setTimeout(() => navigate(backLink), 2000)
+        } else {
+          toast.error('Erreur de chargement du dossier')
+        }
+      })
       .finally(() => setLoading(false))
   }, [id])
 
@@ -114,12 +121,22 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
     </div>
   )
 
-  if (!demande) return (
-    <div className="p-6 text-center text-gray-400">
-      <FileText size={40} className="mx-auto mb-3 opacity-30" />
-      <p>Dossier introuvable</p>
+  if (!loading && !demande) return (
+    <div className="p-12 text-center">
+      <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+        <FileText size={28} className="text-red-300" />
+      </div>
+      <h3 className="font-semibold text-gray-700 mb-2">Dossier introuvable</h3>
+      <p className="text-sm text-gray-400 mb-4">Ce dossier n&apos;existe plus ou a été supprimé.</p>
+      <button onClick={() => navigate(backLink)}
+              className="text-sm text-mmi-green hover:underline font-medium">
+        ← Retour à la liste
+      </button>
     </div>
   )
+
+  // TypeScript: demande est garanti non-null après le check ci-dessus
+  const dem = demande!
 
   const btnColors: Record<string, string> = {
     green:  'bg-mmi-green text-white hover:bg-mmi-green-mid',
@@ -137,8 +154,8 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
         </Link>
         <div className="h-4 w-px bg-gray-200" />
         <div className="flex items-center gap-3">
-          <span className="font-mono font-bold text-mmi-green text-lg">{demande.numero_ref}</span>
-          <StatusBadge statut={demande.statut} />
+          <span className="font-mono font-bold text-mmi-green text-lg">{dem.numero_ref}</span>
+          <StatusBadge statut={dem.statut} />
         </div>
       </div>
 
@@ -150,8 +167,8 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
           <div className="flex gap-1 border-b border-gray-200">
             {[
               { key: 'info',      label: 'Informations' },
-              { key: 'pieces',    label: `Pièces (${demande.pieces_jointes.length})` },
-              { key: 'historique', label: `Historique (${demande.etapes.length})` },
+              { key: 'pieces',    label: `Pièces (${dem.pieces_jointes.length})` },
+              { key: 'historique', label: `Historique (${dem.etapes.length})` },
             ].map(tab => (
               <button
                 key={tab.key}
@@ -172,33 +189,33 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Type de demande</p>
-                  <p className="font-medium text-gray-800">{demande.type_demande.libelle}</p>
+                  <p className="font-medium text-gray-800">{dem.type_demande.libelle}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Date de soumission</p>
                   <p className="font-medium text-gray-800">
-                    {new Date(demande.date_soumission).toLocaleDateString('fr-FR', {
+                    {new Date(dem.date_soumission).toLocaleDateString('fr-FR', {
                       day: 'numeric', month: 'long', year: 'numeric',
                     })}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Établissement</p>
-                  <p className="font-medium text-gray-800">{demande.raison_sociale}</p>
+                  <p className="font-medium text-gray-800">{dem.raison_sociale}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Activité</p>
-                  <p className="font-medium text-gray-800">{demande.activite}</p>
+                  <p className="font-medium text-gray-800">{dem.activite}</p>
                 </div>
                 <div className="col-span-2">
                   <p className="text-xs text-gray-400 mb-1 flex items-center gap-1"><MapPin size={11} /> Adresse</p>
-                  <p className="text-gray-700">{demande.adresse} — {demande.wilaya}</p>
+                  <p className="text-gray-700">{dem.adresse} — {dem.wilaya}</p>
                 </div>
-                {demande.latitude && (
+                {dem.latitude && (
                   <div className="col-span-2">
                     <p className="text-xs text-gray-400 mb-1">Coordonnées GPS</p>
                     <p className="font-mono text-sm text-gray-700">
-                      {demande.latitude?.toFixed(6)}, {demande.longitude?.toFixed(6)}
+                      {dem.latitude?.toFixed(6)}, {dem.longitude?.toFixed(6)}
                     </p>
                   </div>
                 )}
@@ -209,19 +226,19 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-gray-500 text-xs">Nom</p>
-                    <p className="font-medium">{demande.demandeur.nom} {demande.demandeur.prenom}</p>
+                    <p className="font-medium">{dem.demandeur.nom} {dem.demandeur.prenom}</p>
                   </div>
                   <div>
                     <p className="text-gray-500 text-xs">Entreprise</p>
-                    <p className="font-medium">{demande.demandeur.nom_entreprise}</p>
+                    <p className="font-medium">{dem.demandeur.nom_entreprise}</p>
                   </div>
                   <div>
                     <p className="text-gray-500 text-xs">Email</p>
-                    <p className="text-mmi-green">{demande.demandeur.email}</p>
+                    <p className="text-mmi-green">{dem.demandeur.email}</p>
                   </div>
                   <div>
                     <p className="text-gray-500 text-xs">Téléphone</p>
-                    <p>{demande.demandeur.telephone}</p>
+                    <p>{dem.demandeur.telephone}</p>
                   </div>
                 </div>
               </div>
@@ -231,11 +248,11 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
           {/* Pièces jointes */}
           {activeTab === 'pieces' && (
             <div className="card p-6 animate-fadeInUp">
-              {demande.pieces_jointes.length === 0 ? (
+              {dem.pieces_jointes.length === 0 ? (
                 <p className="text-gray-400 text-sm text-center py-6">Aucune pièce jointe</p>
               ) : (
                 <div className="space-y-2">
-                  {demande.pieces_jointes.map((p: any) => (
+                  {dem.pieces_jointes.map((p: any) => (
                     <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                       <div className="flex items-center gap-3">
                         <FileText size={16} className="text-mmi-green" />
@@ -262,13 +279,13 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
           {activeTab === 'historique' && (
             <div className="card p-6 animate-fadeInUp">
               <div className="space-y-0">
-                {demande.etapes.map((etape, i) => (
+                {dem.etapes.map((etape, i) => (
                   <div key={etape.id} className="flex gap-4">
                     <div className="flex flex-col items-center">
                       <div className="w-8 h-8 rounded-full bg-mmi-green-lt border-2 border-mmi-green flex items-center justify-center flex-shrink-0">
                         <Clock size={14} className="text-mmi-green" />
                       </div>
-                      {i < demande.etapes.length - 1 && (
+                      {i < dem.etapes.length - 1 && (
                         <div className="w-0.5 h-8 bg-gray-200 my-1" />
                       )}
                     </div>
@@ -305,26 +322,26 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
         {/* Colonne actions */}
         <div className="space-y-4">
           {/* Raccourcis formulaires DDPI */}
-          {demande.statut && ['EN_TRAITEMENT_DDPI','VISITE_PROGRAMMEE','EN_COMMISSION_BP','ACCORD_PRINCIPE'].includes(demande.statut) && (
+          {dem.statut && ['EN_TRAITEMENT_DDPI','VISITE_PROGRAMMEE','EN_COMMISSION_BP','ACCORD_PRINCIPE'].includes(dem.statut) && (
             <div className="card p-5">
               <p className="font-semibold text-gray-700 text-sm mb-3 flex items-center gap-2">
                 <ExternalLink size={14} className="text-mmi-green" />
                 Formulaires DDPI
               </p>
               <div className="space-y-2">
-                {(demande.statut === 'VISITE_PROGRAMMEE' || demande.statut === 'EN_TRAITEMENT_DDPI') && (
+                {(dem.statut === 'VISITE_PROGRAMMEE' || dem.statut === 'EN_TRAITEMENT_DDPI') && (
                   <Link to={`/ddpi/visite/${id}`}
                         className="flex items-center gap-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors">
                     <ExternalLink size={12} /> PV de visite des lieux
                   </Link>
                 )}
-                {(demande.statut === 'EN_COMMISSION_BP' || demande.statut === 'VISITE_PROGRAMMEE') && (
+                {(dem.statut === 'EN_COMMISSION_BP' || dem.statut === 'VISITE_PROGRAMMEE') && (
                   <Link to={`/ddpi/comite-bp/${id}`}
                         className="flex items-center gap-2 text-xs font-medium text-teal-600 bg-teal-50 hover:bg-teal-100 px-3 py-2 rounded-lg transition-colors">
                     <ExternalLink size={12} /> Réunion Comité BP
                   </Link>
                 )}
-                {demande.type_demande?.code === 'BP' && (
+                {dem.type_demande?.code === 'BP' && (
                   <Link to={`/ddpi/distance/${id}`}
                         className="flex items-center gap-2 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 px-3 py-2 rounded-lg transition-colors">
                     <ExternalLink size={12} /> Vérifier distance 500m
@@ -337,7 +354,7 @@ export default function DossierDetail({ backLink, backLabel, actionsDisponibles 
           {/* Panel statut */}
           <div className="card p-5">
             <p className="text-xs text-gray-400 mb-2">Statut actuel</p>
-            <StatusBadge statut={demande.statut} />
+            <StatusBadge statut={dem.statut} />
           </div>
 
           {/* Actions disponibles */}
